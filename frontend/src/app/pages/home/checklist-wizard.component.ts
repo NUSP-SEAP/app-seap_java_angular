@@ -138,7 +138,7 @@ interface EditItem {
 
         @if (step() === 'setup') {
           <p class="text-muted-sm">Selecione o local para iniciar a verificação.</p>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px">
+          <div class="setup-grid">
             <div>
               <label>Data</label>
               <input type="date" [(ngModel)]="dataOperacao" style="width:100%">
@@ -221,8 +221,12 @@ interface EditItem {
       border-radius: 999px; padding: 10px 20px; font-weight: 600; cursor: pointer; text-decoration: none;
       &:hover { background: var(--row-hover); }
     }
+    .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
     .form-row { margin-bottom: 0; }
     .form-row label { display: block; font-weight: 500; font-size: .9375rem; margin-bottom: 4px; }
+    @media (max-width: 600px) {
+      .setup-grid { grid-template-columns: 1fr; }
+    }
     .wizard-info {
       background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dbeafe;
     }

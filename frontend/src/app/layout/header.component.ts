@@ -1,5 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { AuthService } from '../core/services/auth.service';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-header',
@@ -12,6 +13,9 @@ import { AuthService } from '../core/services/auth.service';
         </div>
         @if (auth.isLoggedIn()) {
           <div class="site-header__right">
+            @if (userFoto()) {
+              <img class="user-avatar" [src]="userFoto()" alt="Foto">
+            }
             <span class="user-greeting">{{ userName() }}</span>
             <button class="btn-logout" (click)="auth.logout()">Sair</button>
           </div>
@@ -38,6 +42,10 @@ import { AuthService } from '../core/services/auth.service';
       align-items: center;
       gap: 16px;
     }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
+      border: 2px solid rgba(255,255,255,.5);
+    }
     .user-greeting { color: #fff; font-size: 0.9rem; font-weight: 600; }
     .btn-logout {
       background: #7f1d1d;
@@ -57,5 +65,10 @@ export class HeaderComponent {
   userName = computed(() => {
     const u = this.auth.user();
     return u?.nome || u?.name || u?.username || '';
+  });
+  userFoto = computed(() => {
+    const url = this.auth.user()?.foto_url;
+    if (!url) return '';
+    return url.startsWith('http') ? url : environment.apiBaseUrl + url;
   });
 }

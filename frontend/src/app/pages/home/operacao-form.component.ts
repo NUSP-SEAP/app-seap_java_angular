@@ -220,6 +220,11 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
     .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: end; }
     .form-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; align-items: end; }
     .radio-row { display: flex; gap: 16px; }
+    @media (max-width: 600px) {
+      .form-grid-2, .form-grid-3, .form-grid-4 { grid-template-columns: 1fr; }
+      .form-actions { flex-direction: column; }
+      .actions-left, .actions-right { width: 100%; justify-content: center; }
+    }
     .sessao-header-row {
       display: flex; justify-content: space-between; align-items: flex-start;
       gap: 12px; margin-bottom: 16px; flex-wrap: wrap;

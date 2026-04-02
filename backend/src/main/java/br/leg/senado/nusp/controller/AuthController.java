@@ -64,6 +64,8 @@ public class AuthController {
 
         setAuthCookie(response, token);
 
+        String fotoUrl = authService.getFotoUrl(user.get("id"), user.get("perfil"));
+
         return ResponseEntity.ok(Map.of(
                 "token", token,
                 "user", Map.of(
@@ -71,7 +73,8 @@ public class AuthController {
                         "role",     user.get("perfil"),
                         "username", user.get("username"),
                         "nome",     user.get("nome_completo"),
-                        "email",    user.get("email")
+                        "email",    user.get("email"),
+                        "foto_url", fotoUrl != null ? fotoUrl : ""
                 )
         ));
     }

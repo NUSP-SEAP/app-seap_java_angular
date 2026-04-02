@@ -149,6 +149,10 @@ import { LookupService } from '../../core/services/lookup.service';
     .field-ro { background: #f9fafb !important; color: #6b7280; cursor: not-allowed; }
     .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 8px; }
     .form-grid-2-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; margin-bottom: 4px; }
+    @media (max-width: 600px) {
+      .form-grid-3, .form-grid-2-toggle { grid-template-columns: 1fr; }
+      .form-actions { flex-direction: column; }
+    }
     .section-title { font-weight: 600; font-size: .95rem; color: #374151; margin: 20px 0 8px; }
     .form-actions {
       display: flex; justify-content: flex-end; gap: 12px;

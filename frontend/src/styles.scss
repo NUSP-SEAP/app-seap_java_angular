@@ -62,15 +62,22 @@ a:hover { color: var(--primary-hover); }
 input, select, textarea {
   font-family: inherit;
   font-size: 0.9375rem;
+  background-color: #fff;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
+  min-height: 44px;
   transition: border-color .15s, box-shadow .15s;
   &:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 4px var(--ring);
   }
+}
+input[type="date"], input[type="time"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
 /* ═══ Botões ═══ */
@@ -95,6 +102,9 @@ input, select, textarea {
   box-shadow: var(--shadow);
   border: 1px solid var(--border);
   padding: 24px;
+}
+@media (max-width: 600px) {
+  .card-custom { padding: 16px 12px; }
 }
 
 /* ═══ Tabelas ═══ */
@@ -192,6 +202,9 @@ input, select, textarea {
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 600px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
 .detalhe-actions {
   display: flex; justify-content: space-between; align-items: center;
   margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border);

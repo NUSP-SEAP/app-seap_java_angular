@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/html-guard").permitAll()
                 .requestMatchers("/api/forms/lookup/**").permitAll()
                 .requestMatchers("/api/forms/checklist/itens-tipo").permitAll()
+                .requestMatchers("/files/**").permitAll()
                 // Admin
                 .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
                 // Tudo mais requer autenticação
