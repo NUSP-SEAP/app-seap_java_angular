@@ -1,0 +1,597 @@
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
+import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { LookupService } from '../../core/services/lookup.service';
+import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
+
+interface ChecklistItem { id: number; nome: string; tipo_widget: string; ordem?: number; }
+interface Resposta { item_tipo_id: number; status: string | null; descricao_falha: string | null; valor_texto: string | null; }
+interface EditItem {
+  item_tipo_id: number; item_nome: string; tipo_widget: string;
+  status: string; descricao_falha: string; valor_texto: string; editado: boolean;
+}
+
+@Component({
+  selector: 'app-checklist-wizard',
+  standalone: true,
+  imports: [FormsModule, RouterLink, FmtDatePipe],
+  template: `
+    <div class="card-custom" style="max-width:700px; margin:0 auto">
+
+      <!-- ═══ MODO EDIÇÃO (readonly + edição) ═══ -->
+      @if (editMode()) {
+        <div class="detalhe-header">
+          <h1>Verificação de Plenários</h1>
+          @if (editData()?.['editado']) {
+            <span class="badge-edited">EDITADO</span>
+          }
+        </div>
+
+        @if (editLoading()) {
+          <p class="text-muted-sm">Carregando...</p>
+        } @else {
+          <!-- 1) Identificação -->
+          <div class="field-row grid-2" style="margin-bottom:16px">
+            <div class="form-row">
+              <label>Data</label>
+              @if (readOnly()) {
+                <div class="field-value">{{ dataOperacao | fmtDate }}</div>
+              } @else {
+                <input type="date" [(ngModel)]="dataOperacao" style="width:100%">
+              }
+            </div>
+            <div class="form-row">
+              <label>Local</label>
+              @if (readOnly()) {
+                <div class="field-value">{{ getSalaNome() }}</div>
+              } @else {
+                <select [(ngModel)]="salaId" style="width:100%">
+                  @for (s of lookup.salas(); track s.id) {
+                    <option [value]="s.id">{{ s.nome }}</option>
+                  }
+                </select>
+              }
+            </div>
+          </div>
+
+          <!-- 2) Itens -->
+          <h3 style="margin:20px 0 10px; font-size:.95rem">Itens Verificados</h3>
+          @for (item of editItems(); track item.item_tipo_id) {
+            <div class="edit-item" [class.edit-item-falha]="item.status === 'Falha'">
+              <div class="edit-item-header">
+                <span class="edit-item-nome">{{ item.item_nome }}</span>
+                <span class="edit-item-right">
+                  @if (item.editado) {
+                    <span class="badge-edited-sm">editado</span>
+                  }
+                  @if (readOnly() && item.tipo_widget !== 'text') {
+                    <span [class]="item.status === 'Falha' ? 'status-falha' : 'status-ok'">
+                      {{ item.status === 'Falha' ? '\u2716 Falha' : '\u2705 Ok' }}
+                    </span>
+                  }
+                </span>
+              </div>
+
+              @if (readOnly()) {
+                @if (item.tipo_widget === 'text') {
+                  <div class="field-value" style="margin-top:6px">{{ item.valor_texto || '--' }}</div>
+                }
+                @if (item.status === 'Falha' && item.descricao_falha) {
+                  <div class="falha-desc-inline">Descrição da falha: {{ item.descricao_falha }}</div>
+                }
+              } @else {
+                @if (item.tipo_widget === 'text') {
+                  <input type="text" [(ngModel)]="item.valor_texto" placeholder="Digite o valor..." style="width:100%; margin-top:6px">
+                } @else {
+                  <div class="edit-radios">
+                    <label class="radio-card-sm" [class.selected]="item.status === 'Ok'">
+                      <input type="radio" [name]="'status_' + item.item_tipo_id" value="Ok" [(ngModel)]="item.status"> ✅ Ok
+                    </label>
+                    <label class="radio-card-sm" [class.selected]="item.status === 'Falha'">
+                      <input type="radio" [name]="'status_' + item.item_tipo_id" value="Falha" [(ngModel)]="item.status"> <span style="color:var(--color-red)">✖</span> Falha
+                    </label>
+                  </div>
+                  @if (item.status === 'Falha') {
+                    <div style="margin-top:6px">
+                      <label style="font-size:.8rem; color:var(--muted)">Descrição da falha *</label>
+                      <textarea [(ngModel)]="item.descricao_falha" rows="2" placeholder="Mínimo 10 caracteres..." style="width:100%"></textarea>
+                      @if (item.descricao_falha.length > 0 && item.descricao_falha.length < 10) {
+                        <p style="color:var(--color-red); font-size:.8rem; margin:4px 0 0">Mínimo 10 caracteres</p>
+                      }
+                    </div>
+                  }
+                }
+              }
+            </div>
+          }
+
+          <!-- 3) Observações -->
+          <h3 style="margin:20px 0 10px; font-size:.95rem">Observações
+            @if (editData()?.['observacoes_editado']) {
+              <span class="badge-edited-sm">editado</span>
+            }
+          </h3>
+          @if (readOnly()) {
+            <div class="field-value obs-value">{{ observacoes || '' }}</div>
+          } @else {
+            <textarea [(ngModel)]="observacoes" rows="3" placeholder="Anotações gerais (opcional)" style="width:100%"></textarea>
+          }
+
+          <!-- Ações -->
+          <div style="display:flex; justify-content:space-between; margin-top:24px">
+            <button class="btn-secondary-custom" (click)="fechar()">Fechar Aba</button>
+            @if (readOnly()) {
+              <button class="btn-primary-custom" (click)="enterEditMode()">Editar</button>
+            } @else {
+              <button class="btn-primary-custom" [disabled]="saving() || !canSaveEdit()" (click)="submitEdit()">
+                {{ saving() ? 'Salvando...' : 'Salvar Alterações' }}
+              </button>
+            }
+          </div>
+        }
+      } @else {
+
+        <!-- ═══ MODO NOVO (wizard) ═══ -->
+        <h1>Verificação de Plenários</h1>
+
+        @if (step() === 'setup') {
+          <p class="text-muted-sm">Selecione o local para iniciar a verificação.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px">
+            <div>
+              <label>Data</label>
+              <input type="date" [(ngModel)]="dataOperacao" style="width:100%">
+            </div>
+            <div>
+              <label>Local</label>
+              <select [(ngModel)]="salaId" (ngModelChange)="onSalaChange()" style="width:100%">
+                <option value="">Selecione...</option>
+                @for (s of lookup.salas(); track s.id) {
+                  <option [value]="s.id">{{ s.nome }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between">
+            <a routerLink="/home" class="btn-secondary-custom">&larr; Voltar</a>
+            <button class="btn-primary-custom" [disabled]="!salaId" (click)="startWizard()">Avançar &rarr;</button>
+          </div>
+        }
+
+        @if (step() === 'wizard' && currentItem()) {
+          <div class="wizard-info">
+            <span class="wizard-label">Verificando:</span>
+            <div class="wizard-sala">{{ salaNome }}</div>
+          </div>
+
+          <h2 class="wizard-item-title">{{ currentItem()!.nome }}</h2>
+
+          @if (currentItem()!.tipo_widget === 'text') {
+            <input type="text" [(ngModel)]="textValue" placeholder="Digite o valor..." style="width:100%" autofocus>
+          } @else {
+            <div class="wizard-radios-classic">
+              <label class="radio-option">
+                <input type="radio" name="status" value="Ok" [(ngModel)]="radioValue" (ngModelChange)="onRadioChange()">
+                <span class="radio-icon ok">&#x2705;</span> Ok
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="status" value="Falha" [(ngModel)]="radioValue" (ngModelChange)="onRadioChange()">
+                <span class="radio-icon falha">&#x2716;</span> Falha
+              </label>
+            </div>
+            @if (radioValue === 'Falha') {
+              <div style="margin-top:12px">
+                <label>Descrição da falha:</label>
+                <textarea [(ngModel)]="falhaDesc" rows="3" placeholder="Mínimo 10 caracteres..." style="width:100%"></textarea>
+                @if (falhaDesc.length > 0 && falhaDesc.length < 10) {
+                  <p style="color:var(--color-red); font-size:0.85rem; margin-top:4px">Insira no mínimo 10 caracteres</p>
+                }
+              </div>
+            }
+          }
+
+          <div style="display:flex; justify-content:space-between; margin-top:20px">
+            <button class="btn-secondary-custom" (click)="prevStep()">&larr; Voltar</button>
+            <button class="btn-primary-custom" [disabled]="!canAdvance()" (click)="nextStep()">
+              Confirmar e Avançar &rarr;
+            </button>
+          </div>
+          <p style="text-align:center; color:var(--muted); font-size:0.9rem; margin-top:12px">
+            Item {{ currentIndex() + 1 }} de {{ itens().length }}
+          </p>
+        }
+
+        @if (step() === 'finish') {
+          <h2>Observações</h2>
+          <textarea [(ngModel)]="observacoes" rows="4" placeholder="Anotações gerais (opcional)" style="width:100%"></textarea>
+          <div style="display:flex; justify-content:space-between; margin-top:20px">
+            <button class="btn-secondary-custom" (click)="backFromFinish()">&larr; Voltar</button>
+            <button class="btn-primary-custom" [disabled]="saving()" (click)="submit()">
+              {{ saving() ? 'Salvando...' : 'Salvar Verificação' }}
+            </button>
+          </div>
+        }
+      }
+    </div>
+  `,
+  styles: [`
+    .btn-secondary-custom {
+      background: #fff; color: var(--text); border: 1px solid var(--border);
+      border-radius: 999px; padding: 10px 20px; font-weight: 600; cursor: pointer; text-decoration: none;
+      &:hover { background: var(--row-hover); }
+    }
+    .form-row { margin-bottom: 0; }
+    .form-row label { display: block; font-weight: 500; font-size: .9375rem; margin-bottom: 4px; }
+    .wizard-info {
+      background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dbeafe;
+    }
+    .wizard-label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+    .wizard-sala { font-size: 1.2rem; font-weight: 600; color: var(--text); }
+    .wizard-item-title { font-size: 1.1rem; margin-bottom: 16px; }
+    .wizard-radios-classic {
+      display: flex; flex-direction: column; gap: 14px; margin: 8px 0;
+    }
+    .radio-option {
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; font-size: 1rem; font-weight: 500;
+    }
+    .radio-option input[type="radio"] { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+    .radio-icon.ok { font-size: 1rem; }
+    .radio-icon.falha { color: #dc2626; font-size: .9rem; }
+    h3 { font-size: .95rem; margin: 24px 0 8px; color: var(--text); }
+    .badge-edited {
+      background: #f59e0b; color: #fff; font-size: .7rem; font-weight: 700;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .badge-edited-sm { color: #f59e0b; font-size: .7rem; font-weight: 600; }
+    .edit-item {
+      border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;
+      margin-bottom: 6px; background: #fff;
+    }
+    .edit-item-falha { background: #fef2f2; border-color: #fecaca; }
+    .edit-item-header { display: flex; justify-content: space-between; align-items: center; }
+    .edit-item-right { display: flex; align-items: center; gap: 8px; }
+    .edit-item-nome { font-weight: 600; font-size: .9rem; }
+    .status-ok { color: #16a34a; font-weight: 600; font-size: .85rem; }
+    .status-falha { color: #dc2626; font-weight: 600; font-size: .85rem; }
+    .falha-desc-inline {
+      margin-top: 6px; padding: 6px 12px; font-size: .85rem;
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 6px;
+    }
+    .edit-radios { display: flex; gap: 8px; margin-top: 6px; }
+    .radio-card-sm {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+      font-size: .85rem; font-weight: 600;
+      &.selected { border-color: var(--primary); background: #eff6ff; }
+      input[type="radio"] { display: none; }
+    }
+  `],
+})
+export class ChecklistWizardComponent implements OnInit {
+  private api = inject(ApiService);
+  private auth = inject(AuthService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  lookup = inject(LookupService);
+
+  // ── Modo ──
+  editMode = signal(false);
+  readOnly = signal(true);
+  editLoading = signal(true);
+  editData = signal<Record<string, any> | null>(null);
+  editItems = signal<EditItem[]>([]);
+  private checklistId = 0;
+
+  // ── Wizard (modo novo) ──
+  step = signal<'setup' | 'wizard' | 'finish'>('setup');
+  dataOperacao = new Date().toISOString().split('T')[0];
+  salaId = '';
+  salaNome = '';
+
+  itens = signal<ChecklistItem[]>([]);
+  currentIndex = signal(0);
+  respostas: Record<number, Resposta> = {};
+  startTime: Date | null = null;
+
+  radioValue = '';
+  falhaDesc = '';
+  textValue = '';
+  observacoes = '';
+  saving = signal(false);
+
+  currentItem = signal<ChecklistItem | null>(null);
+
+  // ── Rascunho (localStorage) ──
+  private readonly DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 horas
+
+  private get DRAFT_KEY(): string {
+    const uid = this.auth.user()?.id || 'anonymous';
+    return `checklist_draft_${uid}`;
+  }
+
+  ngOnInit(): void {
+    this.lookup.loadSalas();
+
+    this.route.queryParams.subscribe(params => {
+      const cid = params['checklist_id'];
+      if (cid) {
+        this.checklistId = +cid;
+        this.editMode.set(true);
+        this.loadEditData();
+      } else {
+        // Modo novo: verificar rascunho salvo
+        const draft = this.loadDraft();
+        if (draft) this.restoreDraft(draft);
+      }
+    });
+  }
+
+  // ═══ RASCUNHO (localStorage) ═══
+
+  private saveDraft(step: string): void {
+    try {
+      const draft = {
+        salaId: this.salaId,
+        salaNome: this.salaNome,
+        itens: this.itens(),
+        currentIndex: this.currentIndex(),
+        respostas: this.respostas,
+        startTime: this.startTime ? this.startTime.toISOString() : null,
+        step,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(this.DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) {
+      console.warn('Não foi possível salvar rascunho:', e);
+    }
+  }
+
+  private clearDraft(): void {
+    try { localStorage.removeItem(this.DRAFT_KEY); } catch (_) {}
+  }
+
+  private loadDraft(): any {
+    try {
+      const raw = localStorage.getItem(this.DRAFT_KEY);
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft.salaId || !draft.itens || draft.itens.length === 0) return null;
+      // Descarta rascunhos de um dia diferente ou com mais de 2 horas
+      if (draft.savedAt) {
+        const savedDate = new Date(draft.savedAt);
+        const today = new Date();
+        const dayChanged = savedDate.getFullYear() !== today.getFullYear()
+          || savedDate.getMonth() !== today.getMonth()
+          || savedDate.getDate() !== today.getDate();
+        if (dayChanged || (Date.now() - draft.savedAt) > this.DRAFT_MAX_AGE_MS) {
+          this.clearDraft();
+          return null;
+        }
+      }
+      return draft;
+    } catch (e) {
+      console.warn('Rascunho inválido, ignorando:', e);
+      this.clearDraft();
+      return null;
+    }
+  }
+
+  private restoreDraft(draft: any): void {
+    this.salaId = String(draft.salaId);
+    this.salaNome = draft.salaNome;
+    this.itens.set(draft.itens);
+    this.currentIndex.set(draft.currentIndex);
+    this.respostas = draft.respostas || {};
+    this.startTime = draft.startTime ? new Date(draft.startTime) : null;
+
+    if (draft.step === 'finish') {
+      this.step.set('finish');
+    } else {
+      this.loadCurrentItem();
+      this.step.set('wizard');
+    }
+  }
+
+  // ═══ MODO EDIÇÃO ═══
+
+  private loadEditData(): void {
+    this.editLoading.set(true);
+    this.api.get<any>('/api/operador/checklist/detalhe', { checklist_id: this.checklistId }).subscribe({
+      next: (res: any) => {
+        const d = res?.data ?? res;
+        this.editData.set(d);
+        this.dataOperacao = this.extractDate(d['data_operacao']);
+        this.salaId = String(d['sala_id'] || '');
+        this.observacoes = d['observacoes'] || '';
+
+        const items: EditItem[] = (d['itens'] || []).map((it: any) => ({
+          item_tipo_id: it['item_tipo_id'],
+          item_nome: it['item_nome'],
+          tipo_widget: it['tipo_widget'] || 'radio',
+          status: it['status'] || '',
+          descricao_falha: it['descricao_falha'] || '',
+          valor_texto: it['valor_texto'] || '',
+          editado: it['editado'] || false,
+        }));
+        this.editItems.set(items);
+        this.readOnly.set(true);
+        this.editLoading.set(false);
+      },
+      error: () => {
+        this.editLoading.set(false);
+        alert('Erro ao carregar checklist.');
+      },
+    });
+  }
+
+  enterEditMode(): void { this.readOnly.set(false); }
+
+  getSalaNome(): string {
+    const sala = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    return sala?.nome || '';
+  }
+
+  canSaveEdit(): boolean {
+    for (const item of this.editItems()) {
+      if (item.tipo_widget !== 'text') {
+        if (!item.status) return false;
+        if (item.status === 'Falha' && item.descricao_falha.trim().length < 10) return false;
+      }
+    }
+    return !!this.dataOperacao && !!this.salaId;
+  }
+
+  submitEdit(): void {
+    this.saving.set(true);
+    const payload = {
+      checklist_id: this.checklistId,
+      data_operacao: this.dataOperacao,
+      sala_id: parseInt(this.salaId, 10),
+      observacoes: this.observacoes || null,
+      itens: this.editItems().map(it => ({
+        item_tipo_id: it.item_tipo_id,
+        status: it.tipo_widget === 'text' ? 'Ok' : it.status,
+        descricao_falha: it.status === 'Falha' ? it.descricao_falha.trim() : null,
+        valor_texto: it.tipo_widget === 'text' ? it.valor_texto.trim() : null,
+      })),
+    };
+
+    this.api.put<any>('/api/forms/checklist/editar', payload).subscribe({
+      next: (res: any) => {
+        this.saving.set(false);
+        if (res.ok) {
+          alert('Checklist atualizado com sucesso!');
+          this.loadEditData(); // recarrega dados atualizados
+        } else {
+          alert('Erro: ' + (res.error || 'Erro desconhecido'));
+        }
+      },
+      error: (err) => {
+        this.saving.set(false);
+        alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão'));
+      },
+    });
+  }
+
+  fechar(): void { window.close(); }
+
+  private extractDate(raw: string): string {
+    if (!raw) return '';
+    return raw.split(' ')[0].split('T')[0];
+  }
+
+  // ═══ MODO NOVO (wizard) ═══
+
+  onSalaChange(): void {}
+
+  startWizard(): void {
+    if (!this.salaId) return;
+    const sel = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    this.salaNome = sel?.nome || '';
+
+    this.api.get<any>('/api/forms/checklist/itens-tipo', { sala_id: this.salaId }).subscribe(res => {
+      const items = res.data || [];
+      if (items.length === 0) { alert('Este local não possui itens de verificação configurados.'); return; }
+      this.itens.set(items);
+      this.currentIndex.set(0);
+      if (!this.startTime) this.startTime = new Date();
+      this.loadCurrentItem();
+      this.step.set('wizard');
+      this.saveDraft('wizard');
+    });
+  }
+
+  private loadCurrentItem(): void {
+    const item = this.itens()[this.currentIndex()];
+    this.currentItem.set(item);
+    const saved = this.respostas[item.id];
+    this.radioValue = saved?.status || '';
+    this.falhaDesc = saved?.descricao_falha || '';
+    this.textValue = saved?.valor_texto || '';
+  }
+
+  canAdvance(): boolean {
+    const item = this.currentItem();
+    if (!item) return false;
+    if (item.tipo_widget === 'text') return true;
+    if (!this.radioValue) return false;
+    if (this.radioValue === 'Falha' && this.falhaDesc.trim().length < 10) return false;
+    return true;
+  }
+
+  isLastItem(): boolean { return this.currentIndex() === this.itens().length - 1; }
+
+  nextStep(): void {
+    const item = this.currentItem()!;
+    this.respostas[item.id] = {
+      item_tipo_id: item.id,
+      status: item.tipo_widget === 'text' ? 'Ok' : this.radioValue,
+      descricao_falha: this.radioValue === 'Falha' ? this.falhaDesc.trim() : null,
+      valor_texto: item.tipo_widget === 'text' ? this.textValue.trim() : null,
+    };
+
+    if (this.isLastItem()) {
+      this.saveDraft('finish');
+      this.step.set('finish');
+    } else {
+      this.currentIndex.update(i => i + 1);
+      this.loadCurrentItem();
+      this.saveDraft('wizard');
+    }
+  }
+
+  prevStep(): void {
+    if (this.currentIndex() > 0) {
+      this.currentIndex.update(i => i - 1);
+      this.loadCurrentItem();
+    } else {
+      this.step.set('setup');
+    }
+  }
+
+  onRadioChange(): void {}
+
+  backFromFinish(): void {
+    this.step.set('wizard');
+    this.loadCurrentItem();
+  }
+
+  submit(): void {
+    if (this.saving()) return; // Proteção contra duplo clique
+    this.saving.set(true);
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hhmmss = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+    const payload = {
+      data_operacao: this.dataOperacao,
+      sala_id: parseInt(this.salaId, 10),
+      hora_inicio_testes: this.startTime ? hhmmss(this.startTime) : null,
+      hora_termino_testes: hhmmss(now),
+      observacoes: this.observacoes || null,
+      itens: Object.values(this.respostas),
+    };
+
+    this.api.post<any>('/api/forms/checklist/registro', payload).subscribe({
+      next: res => {
+        if (res.ok) {
+          this.clearDraft();
+          alert('Checklist salvo com sucesso!');
+          this.router.navigate(['/home']);
+          // Mantém saving=true durante redirecionamento
+        } else {
+          this.saving.set(false);
+          alert('Erro ao salvar: ' + (res.error || res.message || 'Erro desconhecido'));
+        }
+      },
+      error: (err) => {
+        this.saving.set(false);
+        const msg = err.error?.error || 'Erro de conexão ao salvar.';
+        alert(msg);
+      },
+    });
+  }
+}

@@ -1,0 +1,40 @@
+server:
+  port: 8000
+
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: NUSP
+    password: NuspApp2026
+    driver-class-name: oracle.jdbc.OracleDriver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+        default_schema: NUSP
+        format_sql: true
+    show-sql: false
+  jackson:
+    default-property-inclusion: non_null
+
+app:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:aoxTsY3IGbPHc8B60pnS_txFGMGJo6HFCpd3N2BhR4hIuMlkx6GsMqNejI88YoIl}
+    ttl-seconds: ${AUTH_JWT_TTL_SEC:5400}
+    cookie-name: ${AUTH_JWT_COOKIE_NAME:sn_auth_jwt}
+    cookie-domain: ${AUTH_JWT_COOKIE_DOMAIN:}
+  session:
+    touch-max-age-seconds: ${SESSION_TOUCH_MAX_AGE_SECONDS:5400}
+  files:
+    dir: ${FILES_DIR:/home/douglas/senado-nusp/files}
+    url-prefix: ${FILES_URL_PREFIX:/files/}
+    operadores-dirname: operadores
+  admin:
+    supervisor-username: ${ADMIN_SUPERVISOR_USERNAME:emanoel}
+    chefe-username: ${ADMIN_CHEFE_USERNAME:evandrop}
+    master-username: ${ADMIN_MASTER_USERNAME:douglas.antunes}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,http://100.84.123.75:4200}
