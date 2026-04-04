@@ -59,7 +59,7 @@ a:hover { color: var(--primary-hover); }
 }
 
 /* ═══ Inputs / Forms ═══ */
-input, select, textarea {
+input:not([type="radio"]):not([type="checkbox"]), select, textarea {
   font-family: inherit;
   font-size: 0.9375rem;
   background-color: #fff;

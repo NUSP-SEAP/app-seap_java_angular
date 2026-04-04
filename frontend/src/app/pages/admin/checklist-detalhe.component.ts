@@ -52,9 +52,11 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
         @for (it of itens(); track it['id']) {
           <div class="item-row" [class.item-falha]="it['status'] === 'Falha'">
             <span class="item-nome">{{ it['item_nome'] }}</span>
-            <span class="item-status" [class]="it['status'] === 'Falha' ? 'status-falha' : 'status-ok'">
-              {{ it['status'] === 'Falha' ? '\u2716 Falha' : '\u2705 Ok' }}
-            </span>
+            @if (it['tipo_widget'] !== 'text') {
+              <span class="item-status" [class]="it['status'] === 'Falha' ? 'status-falha' : 'status-ok'">
+                {{ it['status'] === 'Falha' ? '\u2716 Falha' : '\u2705 Ok' }}
+              </span>
+            }
           </div>
           @if (it['status'] === 'Falha' && it['descricao_falha']) {
             <div class="item-desc falha-desc">

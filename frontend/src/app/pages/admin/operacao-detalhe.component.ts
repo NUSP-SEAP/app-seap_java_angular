@@ -62,16 +62,15 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
             <div class="field-value">{{ d()!['horario_inicio'] | fmtTime }}</div>
           </div>
           <div class="field">
-            <label>Hora de Término</label>
-            <div class="field-value">{{ d()!['horario_termino'] | fmtTime }}</div>
+            <label>Evento Encerrado?</label>
+            <div class="field-value">{{ d()!['horario_termino'] ? 'Sim' : 'Não' }}</div>
           </div>
         </div>
 
-        <!-- Evento Encerrado -->
         <div class="field-row grid-3">
           <div class="field">
-            <label>Evento Encerrado?</label>
-            <div class="field-value">{{ d()!['horario_termino'] ? 'Sim' : 'Não' }}</div>
+            <label>Hora de Término</label>
+            <div class="field-value">{{ d()!['horario_termino'] | fmtTime }}</div>
           </div>
           <div class="field">
             <label>Hora de Entrada (operador)</label>

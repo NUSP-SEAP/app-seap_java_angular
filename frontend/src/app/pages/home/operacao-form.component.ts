@@ -104,19 +104,19 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
               <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()" (change)="onHoraInicioChange()">
             </div>
             <div class="form-row">
-              <label [class.label-sm]="editData()?.['horario_termino_editado']">Término do evento @if (eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['horario_termino_editado']) { <span class="badge-edited badge-edited-sm">editado</span> }</label>
-              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled() || !eventoEncerrado" [readonly]="isRO()" [class.field-ro]="isRO() || !eventoEncerrado" (change)="onHoraFimChange()">
-            </div>
-          </div>
-
-          <!-- Evento Encerrado + Início Operação + Término Operação -->
-          <div class="form-grid-3">
-            <div class="form-row">
               <label>Evento Encerrado</label>
               <div class="radio-row">
                 <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="true" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Sim</label>
                 <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="false" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Não</label>
               </div>
+            </div>
+          </div>
+
+          <!-- Término do evento + Início Operação + Término Operação -->
+          <div class="form-grid-3">
+            <div class="form-row">
+              <label [class.label-sm]="editData()?.['horario_termino_editado']">Término do evento @if (eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['horario_termino_editado']) { <span class="badge-edited badge-edited-sm">editado</span> }</label>
+              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled() || !eventoEncerrado" [readonly]="isRO()" [class.field-ro]="isRO() || !eventoEncerrado" (change)="onHoraFimChange()">
             </div>
             <div class="form-row">
               <label>Início da operação @if (sessaoAberta() && !editMode()) { <span class="req">*</span> } @if (editData()?.['hora_entrada_editado']) { <span class="badge-edited">editado</span> }</label>

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService, ListParams } from '../../core/services/api.service';
@@ -55,15 +55,34 @@ interface TableState extends ListParams {
                 [currentSort]="opState.sort" [currentDir]="opState.direction"
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
+            <th style="width:110px">Alterar Senha</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
-              <tr><td colspan="2" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
+              <tr><td colspan="3" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
             } @else {
               @for (op of opRows(); track op['id']) {
                 <tr>
                   <td><strong>{{ op['nome_completo'] || op['nome'] }}</strong></td>
                   <td>{{ op['email'] }}</td>
+                  <td>
+                    <button class="btn-xs" (click)="openSenhaPopup(op)">Alterar</button>
+                    @if (senhaPopupOp === op) {
+                      <div class="senha-overlay" (click)="closeSenhaPopup()"></div>
+                      <div class="senha-popup">
+                        <label>Nova Senha</label>
+                        <input type="password" [(ngModel)]="senhaNova" placeholder="Mínimo 4 caracteres">
+                        <label>Confirmar Senha</label>
+                        <input type="password" [(ngModel)]="senhaConfirm" placeholder="Repita a senha">
+                        <div class="senha-popup-actions">
+                          <button class="btn-xs" (click)="closeSenhaPopup()">Cancelar</button>
+                          <button class="btn-xs btn-xs-primary" (click)="confirmarAlterarSenha(op)" [disabled]="senhaSaving">
+                            {{ senhaSaving ? 'Salvando...' : 'Alterar' }}
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </td>
                 </tr>
               }
             }
@@ -147,7 +166,7 @@ interface TableState extends ListParams {
                             @for (it of asArray(chk['itens']); track it['id'] || $index) {
                               <tr>
                                 <td>{{ it['item_nome'] || it['item'] }}</td>
-                                <td [class]="it['status'] === 'Falha' ? 'badge-falha' : 'badge-ok'">{{ it['status'] }}</td>
+                                <td [class]="it['tipo_widget'] === 'text' ? '' : (it['status'] === 'Falha' ? 'badge-falha' : 'badge-ok')">{{ it['tipo_widget'] === 'text' ? 'Texto' : it['status'] }}</td>
                                 <td>{{ it['descricao_falha'] || it['valor_texto'] || '-' }}</td>
                               </tr>
                             }
@@ -170,10 +189,26 @@ interface TableState extends ListParams {
     .card-link { display:flex; align-items:center; padding:16px 20px; text-decoration:none; color:var(--text); font-weight:600; font-size:.95rem; transition:box-shadow .15s; cursor:pointer; &:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);} }
     .card-disabled { opacity:.6; cursor:default; &:hover{box-shadow:none;} }
     section { margin-bottom:28px; }
+    .btn-xs-primary { background:var(--primary) !important; color:#fff !important; border-color:var(--primary) !important; }
+    .btn-xs-primary:hover { background:var(--primary-hover) !important; }
+    .btn-xs-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .senha-overlay {
+      position:fixed; inset:0; z-index:99; background:rgba(0,0,0,.25);
+    }
+    .senha-popup {
+      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:100;
+      background:#fff; border:1px solid var(--border); border-radius:10px;
+      box-shadow:0 12px 32px rgba(0,0,0,.18); padding:20px 24px; width:300px;
+      display:flex; flex-direction:column; gap:8px;
+      label { font-size:.8rem; font-weight:600; color:var(--muted); }
+      input { font-size:.875rem; padding:8px 10px; }
+    }
+    .senha-popup-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
   `],
 })
 export class AdminDashboardComponent implements OnInit {
   private api = inject(ApiService);
+  private cdr = inject(ChangeDetectorRef);
   private debounceOp: any; private debounceChk: any;
 
   // ── Column definitions ──
@@ -199,6 +234,42 @@ export class AdminDashboardComponent implements OnInit {
   chkFilters: Record<string, ColumnFilterState> = {};
   chkRows = signal<Record<string,unknown>[]>([]); chkMeta = signal<PaginationMeta|null>(null); chkLoading = signal(true);
   chkSearch = '';
+
+  // ── Alterar Senha ──
+  senhaPopupOp: Record<string,unknown> | null = null;
+  senhaNova = '';
+  senhaConfirm = '';
+  senhaSaving = false;
+
+  openSenhaPopup(op: Record<string,unknown>): void {
+    this.senhaPopupOp = op;
+    this.senhaNova = '';
+    this.senhaConfirm = '';
+  }
+
+  closeSenhaPopup(): void {
+    this.senhaPopupOp = null;
+  }
+
+  confirmarAlterarSenha(op: Record<string,unknown>): void {
+    if (this.senhaNova.length < 4) { alert('A senha deve ter pelo menos 4 caracteres.'); return; }
+    if (this.senhaNova !== this.senhaConfirm) { alert('As senhas não conferem.'); return; }
+    this.senhaSaving = true;
+    this.api.post<any>(`/api/admin/operador/${op['id']}/alterar-senha`, { nova_senha: this.senhaNova }).subscribe({
+      next: (res: any) => {
+        this.senhaSaving = false;
+        this.senhaPopupOp = null;
+        this.cdr.detectChanges();
+        alert(res.ok ? 'Senha alterada com sucesso!' : (res.message || 'Erro ao alterar senha.'));
+      },
+      error: (err: any) => {
+        this.senhaSaving = false;
+        this.senhaPopupOp = null;
+        this.cdr.detectChanges();
+        alert(err?.error?.message || 'Erro ao alterar senha.');
+      },
+    });
+  }
 
   ngOnInit(): void { this.loadOperadores(); this.loadChecklists(); }
 
@@ -266,12 +337,13 @@ export class AdminDashboardComponent implements OnInit {
     const inicio = String(chk['inicio'] || chk['hora_inicio_testes'] || '');
     const termino = String(chk['termino'] || chk['hora_termino_testes'] || '');
     if (!inicio || !termino) return '-';
-    const toMin = (t: string) => { const p = t.split(':'); return (+p[0]) * 60 + (+p[1]); };
-    const diff = toMin(termino) - toMin(inicio);
+    const toSec = (t: string) => { const p = t.split(':'); return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0); };
+    const diff = toSec(termino) - toSec(inicio);
     if (diff <= 0) return '-';
-    const h = Math.floor(diff / 60);
-    const m = diff % 60;
-    return h > 0 ? `${h}h ${m}min` : `${m}min`;
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
   // ── Relatórios ──

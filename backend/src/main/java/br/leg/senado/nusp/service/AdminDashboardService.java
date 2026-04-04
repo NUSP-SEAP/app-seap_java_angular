@@ -85,7 +85,7 @@ public class AdminDashboardService {
 
         List<Object[]> itens = em.createNativeQuery("""
                 SELECT r.ID, r.ITEM_TIPO_ID, t.NOME AS ITEM_NOME, r.STATUS,
-                       r.DESCRICAO_FALHA, r.VALOR_TEXTO, r.EDITADO
+                       r.DESCRICAO_FALHA, r.VALOR_TEXTO, r.EDITADO, t.TIPO_WIDGET
                 FROM FRM_CHECKLIST_RESPOSTA r
                 JOIN FRM_CHECKLIST_ITEM_TIPO t ON t.ID = r.ITEM_TIPO_ID
                 LEFT JOIN FRM_CHECKLIST_SALA_CONFIG sc ON sc.ITEM_TIPO_ID = t.ID AND sc.SALA_ID = ?2
@@ -99,7 +99,8 @@ public class AdminDashboardService {
                     "item_nome", str(it[2]), "status", str(it[3]),
                     "descricao_falha", str(it[4]) != null ? str(it[4]) : "",
                     "valor_texto", str(it[5]) != null ? str(it[5]) : "",
-                    "editado", boolVal(it[6])));
+                    "editado", boolVal(it[6]),
+                    "tipo_widget", str(it[7]) != null ? str(it[7]) : "radio"));
         }
         result.put("itens", itensList);
         return result;
@@ -115,7 +116,8 @@ public class AdminDashboardService {
                                       Map<String, Object> periodo, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
                 "r.ID, r.DATA AS data, s.NOME AS sala_nome, r.EM_ABERTO, " +
-                "r.CHECKLIST_DO_DIA_OK, o.NOME_COMPLETO AS criado_por_nome",
+                "CASE WHEN r.CHECKLIST_DO_DIA_ID IS NOT NULL THEN 1 ELSE 0 END AS CHECKLIST_DO_DIA_OK, " +
+                "o.NOME_COMPLETO AS criado_por_nome",
                 "FROM OPR_REGISTRO_AUDIO r JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
                 "LEFT JOIN PES_OPERADOR o ON o.ID = r.CRIADO_POR",
                 "r.DATA", OP_SESS_SORT, List.of("s.NOME"),

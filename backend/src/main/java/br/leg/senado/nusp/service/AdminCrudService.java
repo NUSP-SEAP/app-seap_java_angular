@@ -353,7 +353,8 @@ public class AdminCrudService {
         List<Sala> salasAtivas = salaRepo.findAtivasOrdenadas();
         int count = 0;
         for (Sala sala : salasAtivas) {
-            if (sala.getId().equals(sourceSalaId)) continue;
+            // Aplicar somente nos plenários numerados (ex: "Plenário 02")
+            if (sala.getNome() == null || !sala.getNome().matches("(?i)plenário \\d+")) continue;
             try {
                 doSaveSalaConfig(sala.getId(), items);
                 count++;
@@ -440,6 +441,17 @@ public class AdminCrudService {
         }
 
         return new int[]{created, updated};
+    }
+
+    // ══ Alterar Senha de Operador ════════════════════════════════
+
+    @Transactional
+    public void changeOperadorPassword(String operadorId, String novaSenha) {
+        Operador op = operadorRepo.findById(operadorId)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        op.setPasswordHash(passwordEncoder.encode(novaSenha));
+        operadorRepo.save(op);
     }
 
     // ══ Helpers ═════════════════════════════════════════════════

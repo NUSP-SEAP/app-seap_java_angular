@@ -67,6 +67,21 @@ public class AdminCrudController {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
+    // ══ Alterar Senha de Operador ═══════════════════════════════
+
+    @PostMapping("/operador/{id}/alterar-senha")
+    public ResponseEntity<?> alterarSenhaOperador(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> payload) {
+        String novaSenha = payload.get("nova_senha") != null ? payload.get("nova_senha").toString() : "";
+        if (novaSenha.length() < 4) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false, "message", "A senha deve ter pelo menos 4 caracteres."));
+        }
+        crudService.changeOperadorPassword(id, novaSenha);
+        return ResponseEntity.ok(Map.of("ok", true, "message", "Senha alterada com sucesso."));
+    }
+
     // ══ Form Edit — Listar ══════════════════════════════════════
 
     @GetMapping("/form-edit/{entidade}/list")
