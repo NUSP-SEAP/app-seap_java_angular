@@ -7,12 +7,10 @@
 
 ## Configuração
 
-Copiar o arquivo de exemplo e preencher com as credenciais:
-
 ```bash
 cd docker/
 cp .env.example .env
-# Editar .env com as credenciais reais
+# Editar .env com as credenciais desejadas
 ```
 
 ## Subir o sistema
@@ -22,7 +20,14 @@ cd docker/
 docker compose up -d
 ```
 
-Isso cria 3 containers:
+Na **primeira execução**, o Oracle inicializa automaticamente:
+1. Cria o usuário NUSP (via `APP_USER` do `.env`)
+2. Cria as 17 tabelas (via `oracle-init/01-schema.sql`)
+3. Insere dados iniciais — salas, comissões e usuários de teste (via `oracle-init/02-seed-data.sql`)
+
+O backend pode reiniciar algumas vezes enquanto o Oracle inicializa (~1-2 minutos). Isso é normal.
+
+## Containers
 
 | Container | Serviço | Porta |
 |---|---|---|
@@ -30,24 +35,12 @@ Isso cria 3 containers:
 | nusp-backend | Spring Boot (Java 17) | 8003 (interna) |
 | nusp-frontend | Angular + Nginx | 80 |
 
-## Primeiro uso — criar schema
+## Usuários de teste
 
-Após o Oracle estar pronto (~1-2 minutos na primeira vez):
-
-```bash
-# Criar usuário NUSP (substituir as senhas pelas do .env)
-docker exec -i nusp-oracle sqlplus -s "sys/<ORACLE_PASSWORD>@XEPDB1 as sysdba" <<EOF
-CREATE USER NUSP IDENTIFIED BY <ORACLE_APP_PASSWORD>
-  DEFAULT TABLESPACE USERS TEMPORARY TABLESPACE TEMP
-  QUOTA UNLIMITED ON USERS;
-GRANT CONNECT, RESOURCE, CREATE SESSION, CREATE TABLE,
-      CREATE SEQUENCE, CREATE VIEW, CREATE PROCEDURE TO NUSP;
-EOF
-
-# Importar estrutura do banco
-docker cp ../nusp-schema.sql nusp-oracle:/tmp/
-docker exec -i nusp-oracle sqlplus "NUSP/<ORACLE_APP_PASSWORD>@XEPDB1" @/tmp/nusp-schema.sql
-```
+| Perfil | Login | Senha |
+|---|---|---|
+| Administrador | admin | admin |
+| Operador | operador | 1234 |
 
 ## Acessar
 

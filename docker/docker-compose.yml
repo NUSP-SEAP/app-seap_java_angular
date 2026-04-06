@@ -12,8 +12,11 @@ services:
     restart: unless-stopped
     environment:
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_APP_USER}
+      APP_USER_PASSWORD: ${ORACLE_APP_PASSWORD}
     volumes:
       - oracle-xe-java-data:/opt/oracle/oradata
+      - ./oracle-init:/container-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "sqlplus", "-s", "${ORACLE_APP_USER}/${ORACLE_APP_PASSWORD}@XEPDB1", "<<< 'SELECT 1 FROM DUAL;'"]
       interval: 30s
