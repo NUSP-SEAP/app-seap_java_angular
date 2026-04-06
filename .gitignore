@@ -3,7 +3,6 @@
 !backend/
 !frontend/
 !docker/
-!nusp-schema.sql
 !.dockerignore
 !.gitignore
 
