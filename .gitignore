@@ -4,7 +4,11 @@
 !frontend/
 !docker/
 !nusp-schema.sql
+!.dockerignore
 !.gitignore
+
+# ══ Credenciais (NUNCA commitar) ══
+docker/.env
 
 # ══ Backend (Java/Maven) ══
 backend/target/
