@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService, ListParams } from '../../core/services/api.service';
@@ -55,7 +55,7 @@ interface TableState extends ListParams {
                 [currentSort]="opState.sort" [currentDir]="opState.direction"
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
-            <th style="width:110px">Alterar Senha</th>
+            <th style="width:120px">Op. Plenário</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
@@ -65,23 +65,9 @@ interface TableState extends ListParams {
                 <tr>
                   <td><strong>{{ op['nome_completo'] || op['nome'] }}</strong></td>
                   <td>{{ op['email'] }}</td>
-                  <td>
-                    <button class="btn-xs" (click)="openSenhaPopup(op)">Alterar</button>
-                    @if (senhaPopupOp === op) {
-                      <div class="senha-overlay" (click)="closeSenhaPopup()"></div>
-                      <div class="senha-popup">
-                        <label>Nova Senha</label>
-                        <input type="password" [(ngModel)]="senhaNova" placeholder="Mínimo 4 caracteres">
-                        <label>Confirmar Senha</label>
-                        <input type="password" [(ngModel)]="senhaConfirm" placeholder="Repita a senha">
-                        <div class="senha-popup-actions">
-                          <button class="btn-xs" (click)="closeSenhaPopup()">Cancelar</button>
-                          <button class="btn-xs btn-xs-primary" (click)="confirmarAlterarSenha(op)" [disabled]="senhaSaving">
-                            {{ senhaSaving ? 'Salvando...' : 'Alterar' }}
-                          </button>
-                        </div>
-                      </div>
-                    }
+                  <td style="text-align:center">
+                    <input type="checkbox" [checked]="op['plenario_principal'] === true || op['plenario_principal'] === 1"
+                      (change)="togglePlenario(op)" style="cursor:pointer; width:18px; height:18px">
                   </td>
                 </tr>
               }
@@ -192,23 +178,10 @@ interface TableState extends ListParams {
     .btn-xs-primary { background:var(--primary) !important; color:#fff !important; border-color:var(--primary) !important; }
     .btn-xs-primary:hover { background:var(--primary-hover) !important; }
     .btn-xs-primary:disabled { opacity:.5; cursor:not-allowed; }
-    .senha-overlay {
-      position:fixed; inset:0; z-index:99; background:rgba(0,0,0,.25);
-    }
-    .senha-popup {
-      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:100;
-      background:#fff; border:1px solid var(--border); border-radius:10px;
-      box-shadow:0 12px 32px rgba(0,0,0,.18); padding:20px 24px; width:300px;
-      display:flex; flex-direction:column; gap:8px;
-      label { font-size:.8rem; font-weight:600; color:var(--muted); }
-      input { font-size:.875rem; padding:8px 10px; }
-    }
-    .senha-popup-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
   `],
 })
 export class AdminDashboardComponent implements OnInit {
   private api = inject(ApiService);
-  private cdr = inject(ChangeDetectorRef);
   private debounceOp: any; private debounceChk: any;
 
   // ── Column definitions ──
@@ -235,38 +208,15 @@ export class AdminDashboardComponent implements OnInit {
   chkRows = signal<Record<string,unknown>[]>([]); chkMeta = signal<PaginationMeta|null>(null); chkLoading = signal(true);
   chkSearch = '';
 
-  // ── Alterar Senha ──
-  senhaPopupOp: Record<string,unknown> | null = null;
-  senhaNova = '';
-  senhaConfirm = '';
-  senhaSaving = false;
-
-  openSenhaPopup(op: Record<string,unknown>): void {
-    this.senhaPopupOp = op;
-    this.senhaNova = '';
-    this.senhaConfirm = '';
-  }
-
-  closeSenhaPopup(): void {
-    this.senhaPopupOp = null;
-  }
-
-  confirmarAlterarSenha(op: Record<string,unknown>): void {
-    if (this.senhaNova.length < 4) { alert('A senha deve ter pelo menos 4 caracteres.'); return; }
-    if (this.senhaNova !== this.senhaConfirm) { alert('As senhas não conferem.'); return; }
-    this.senhaSaving = true;
-    this.api.post<any>(`/api/admin/operador/${op['id']}/alterar-senha`, { nova_senha: this.senhaNova }).subscribe({
+  // ── Toggle Plenário ──
+  togglePlenario(op: Record<string,unknown>): void {
+    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-plenario`, {}).subscribe({
       next: (res: any) => {
-        this.senhaSaving = false;
-        this.senhaPopupOp = null;
-        this.cdr.detectChanges();
-        alert(res.ok ? 'Senha alterada com sucesso!' : (res.message || 'Erro ao alterar senha.'));
+        if (res.ok) op['plenario_principal'] = res.plenario_principal ? 1 : 0;
       },
-      error: (err: any) => {
-        this.senhaSaving = false;
-        this.senhaPopupOp = null;
-        this.cdr.detectChanges();
-        alert(err?.error?.message || 'Erro ao alterar senha.');
+      error: () => {
+        alert('Erro ao alterar flag de plenário.');
+        this.loadOperadores();
       },
     });
   }

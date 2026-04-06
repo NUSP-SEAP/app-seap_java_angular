@@ -51,7 +51,7 @@ class AdminCrudServiceTest {
         void missingFields_throws400() {
             ServiceValidationException ex = assertThrows(
                     ServiceValidationException.class,
-                    () -> service.criarOperador(null, null, null, null, null, null));
+                    () -> service.criarOperador(null, null, null, null, null, null, false));
 
             assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
             assertEquals("invalid_payload", ex.getMessage());
@@ -67,7 +67,7 @@ class AdminCrudServiceTest {
 
             ServiceValidationException ex = assertThrows(
                     ServiceValidationException.class,
-                    () -> service.criarOperador("João", "Joãozinho", "joao@senado.leg.br", "joao", "123456", null));
+                    () -> service.criarOperador("João", "Joãozinho", "joao@senado.leg.br", "joao", "123456", null, false));
 
             assertEquals(HttpStatus.CONFLICT, ex.getStatus());
             assertTrue(ex.getExtraFields().get("message").toString().contains("E-mail já cadastrado"));
@@ -81,7 +81,7 @@ class AdminCrudServiceTest {
 
             ServiceValidationException ex = assertThrows(
                     ServiceValidationException.class,
-                    () -> service.criarOperador("João", "Joãozinho", "novo@senado.leg.br", "joao", "123456", null));
+                    () -> service.criarOperador("João", "Joãozinho", "novo@senado.leg.br", "joao", "123456", null, false));
 
             assertEquals(HttpStatus.CONFLICT, ex.getStatus());
             assertTrue(ex.getExtraFields().get("message").toString().contains("usuário já cadastrado"));
@@ -103,7 +103,7 @@ class AdminCrudServiceTest {
             when(operadorRepo.save(any())).thenReturn(saved);
 
             Map<String, Object> result = service.criarOperador(
-                    "Novo Operador", "Novo", "novo@senado.leg.br", "novo", "Senha@2026", null);
+                    "Novo Operador", "Novo", "novo@senado.leg.br", "novo", "Senha@2026", null, false);
 
             assertEquals("uuid-new", result.get("id"));
             assertEquals("Novo Operador", result.get("nome_completo"));

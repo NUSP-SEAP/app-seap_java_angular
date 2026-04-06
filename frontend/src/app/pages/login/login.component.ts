@@ -1,12 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <div class="login-wrapper">
       <div class="login-card card-custom">
@@ -41,6 +41,10 @@ import { AuthService } from '../../core/services/auth.service';
           <button type="submit" class="btn-primary-custom btn-login" [disabled]="loading()">
             {{ loading() ? 'Entrando...' : 'Entrar' }}
           </button>
+
+          <div class="forgot-link">
+            <a routerLink="/forgot-password">Esqueci a senha</a>
+          </div>
         </form>
       </div>
     </div>
@@ -106,6 +110,16 @@ import { AuthService } from '../../core/services/auth.service';
       font-size: 0.875rem;
       text-align: center;
     }
+    .forgot-link {
+      text-align: center;
+      margin-top: 4px;
+    }
+    .forgot-link a {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+    .forgot-link a:hover { text-decoration: underline; }
     .text-muted-custom { color: var(--muted); }
   `],
 })

@@ -60,8 +60,24 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             }
           </div>
 
+          <!-- Operadores (Plenário Principal) -->
+          @if (isMultiOperador && !editMode()) {
+            <div class="form-row">
+              <label>Operadores <span class="req">*</span></label>
+              <div class="checkbox-list">
+                @for (op of lookup.operadoresPlenario(); track op.id) {
+                  <label class="checkbox-item">
+                    <input type="checkbox" [checked]="selectedOperadorIds.includes(op.id + '')"
+                      (change)="toggleOperadorRoa(op.id + '', $event)">
+                    {{ op.nome_completo }}
+                  </label>
+                }
+              </div>
+            </div>
+          }
+
           <!-- Atividade Legislativa (condicional) -->
-          @if (showComissao()) {
+          @if (showComissao() && !isMultiOperador) {
             <div class="form-row">
               <label>Atividade Legislativa <span class="req">*</span> @if (editData()?.['comissao_editado']) { <span class="badge-edited">editado</span> }</label>
               @if (isRO()) {
@@ -83,13 +99,52 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             <input [(ngModel)]="nomeEvento" name="nome_evento" placeholder="Ex.: 37ª reunião..." [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
           </div>
 
-          <!-- Responsável pelo Evento -->
+          <!-- Responsável pelo Evento (não exibido no Plenário Principal) -->
+          @if (!isMultiOperador) {
           <div class="form-row">
             <label>Responsável pelo Evento <span class="req">*</span> @if (editData()?.['responsavel_evento_editado']) { <span class="badge-edited">editado</span> }</label>
             <input [(ngModel)]="responsavelEvento" name="responsavel_evento" placeholder="Ex.: Secretário da Reunião ou da Mesa" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
           </div>
+          }
 
-          <!-- Data + Pauta + Início + Término -->
+          @if (isMultiOperador && !editMode()) {
+          <!-- Plenário Principal: Data + Início + Término -->
+          <div class="form-grid-3">
+            <div class="form-row">
+              <label>Data <span class="req">*</span></label>
+              <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()">
+            </div>
+            <div class="form-row">
+              <label>Início da sessão <span class="req">*</span></label>
+              <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()">
+            </div>
+            <div class="form-row">
+              <label>Término da sessão <span class="req">*</span></label>
+              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled()">
+            </div>
+          </div>
+
+          <!-- Suspensões -->
+          <div class="form-row">
+            <label>Suspensões</label>
+            @for (susp of suspensoes; track $index) {
+              <div class="form-grid-3" style="margin-bottom:8px; align-items:end">
+                <div class="form-row" style="margin-bottom:0">
+                  <label style="font-size:.8rem; color:var(--muted)">Suspende</label>
+                  <input type="time" [(ngModel)]="susp.hora_suspensao" [name]="'susp_' + $index" step="60">
+                </div>
+                <div class="form-row" style="margin-bottom:0">
+                  <label style="font-size:.8rem; color:var(--muted)">Reabre</label>
+                  <input type="time" [(ngModel)]="susp.hora_reabertura" [name]="'reab_' + $index" step="60">
+                </div>
+                <button type="button" class="btn-outline" style="height:38px; padding:0 12px; font-size:.8rem" (click)="removeSuspensao($index)">Remover</button>
+              </div>
+            }
+            <button type="button" class="btn-outline" (click)="addSuspensao()" style="margin-top:4px">+ Adicionar Suspensão</button>
+          </div>
+          } @else {
+
+          <!-- Plenários Numerados: Data + Pauta + Início + Evento Encerrado -->
           <div class="form-grid-4">
             <div class="form-row">
               <label>Data <span class="req">*</span></label>
@@ -133,6 +188,7 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
                      [class.field-ro]="isRO() || eventoEncerrado">
             </div>
           </div>
+          }
 
           <!-- USB -->
           <div class="form-grid-2">
@@ -255,6 +311,14 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
       margin-top: 24px; flex-wrap: wrap; gap: 8px;
     }
     .actions-left, .actions-right { display: flex; gap: 8px; align-items: center; }
+    .checkbox-list { display: flex; flex-direction: column; gap: 6px; }
+    .checkbox-item {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: .9rem; font-weight: 500;
+      &:hover { background: #f8fafc; }
+      input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    }
   `],
 })
 export class OperacaoFormComponent implements OnInit {
@@ -304,8 +368,33 @@ export class OperacaoFormComponent implements OnInit {
   houveAnormalidade = 'nao';
   eventoEncerrado = true;
 
+  // ── Multi-operador (Plenário Principal) ──
+  isMultiOperador = false;
+  selectedOperadorIds: string[] = [];
+  suspensoes: { hora_suspensao: string; hora_reabertura: string }[] = [];
+
+  toggleOperadorRoa(id: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) {
+      if (!this.selectedOperadorIds.includes(id)) this.selectedOperadorIds.push(id);
+    } else {
+      const idx = this.selectedOperadorIds.indexOf(id);
+      if (idx >= 0) this.selectedOperadorIds.splice(idx, 1);
+    }
+  }
+
+  addSuspensao(): void {
+    this.suspensoes.push({ hora_suspensao: '', hora_reabertura: '' });
+  }
+
+  removeSuspensao(i: number): void {
+    this.suspensoes.splice(i, 1);
+  }
+
   ngOnInit(): void {
-    this.lookup.loadAll();
+    this.lookup.loadSalasOperador();
+    this.lookup.loadOperadores();
+    this.lookup.loadComissoes();
 
     this.route.queryParams.subscribe(params => {
       const eid = params['entrada_id'];
@@ -439,8 +528,18 @@ export class OperacaoFormComponent implements OnInit {
     if (!this.salaId) {
       this.situacao.set('inicial');
       this.estadoSessao = null;
+      this.isMultiOperador = false;
       this.limparFormulario();
       return;
+    }
+
+    // Detectar multi-operador
+    const sala = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    this.isMultiOperador = sala?.multi_operador === true;
+    if (this.isMultiOperador) {
+      this.lookup.loadOperadoresPlenario();
+      this.suspensoes = [];
+      this.selectedOperadorIds = [];
     }
 
     // Limpar campos antes de carregar estado da nova sala
@@ -455,7 +554,11 @@ export class OperacaoFormComponent implements OnInit {
         const entradasOp: any[] = data.entradas_operador || [];
         const sessaoAberta = data.existe_sessao_aberta === true;
 
-        if (!sessaoAberta && entradasOp.length === 0) {
+        if (this.isMultiOperador) {
+          // Plenário Principal: sempre sem_sessao (registro único, auto-encerrado)
+          this.situacao.set('sem_sessao');
+          this.isPrimeiroOp = true;
+        } else if (!sessaoAberta && entradasOp.length === 0) {
           this.situacao.set('sem_sessao');
           this.isPrimeiroOp = true;
         } else if (sessaoAberta && entradasOp.length === 0) {
@@ -612,12 +715,20 @@ export class OperacaoFormComponent implements OnInit {
 
   onSubmit(): void {
     if (!this.salaId && !this.editMode()) { this.focusFirst('sala_id'); return; }
-    if (this.showComissao() && !this.comissaoId) { this.focusFirst('comissao_id'); return; }
     if (!this.nomeEvento) { this.focusFirst('nome_evento'); return; }
     if (!this.horaInicio) { this.focusFirst('hora_inicio'); return; }
-    if (this.eventoEncerrado && !this.horaFim) { this.focusFirst('hora_fim'); return; }
-    if (!this.eventoEncerrado && !this.horaSaida) { this.focusFirst('hora_saida'); return; }
-    if (this.sessaoAberta() && !this.editMode() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
+
+    if (this.isMultiOperador && !this.editMode()) {
+      // Validações específicas Plenário Principal
+      if (this.selectedOperadorIds.length === 0) { alert('Selecione pelo menos um operador.'); return; }
+      if (!this.horaFim) { this.focusFirst('hora_fim'); return; }
+    } else {
+      // Validações plenários numerados
+      if (this.showComissao() && !this.comissaoId) { this.focusFirst('comissao_id'); return; }
+      if (this.eventoEncerrado && !this.horaFim) { this.focusFirst('hora_fim'); return; }
+      if (!this.eventoEncerrado && !this.horaSaida) { this.focusFirst('hora_saida'); return; }
+      if (this.sessaoAberta() && !this.editMode() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
+    }
 
     if (this.editMode()) {
       this.submitEdit();
@@ -732,22 +843,29 @@ export class OperacaoFormComponent implements OnInit {
       if (/audit[oó]rio/.test(nome)) tipoEvento = 'outros';
     }
 
-    return {
-      comissao_id: this.comissaoId ? parseInt(this.comissaoId, 10) : null,
+    const payload: Record<string, any> = {
+      comissao_id: this.isMultiOperador ? null : (this.comissaoId ? parseInt(this.comissaoId, 10) : null),
       data_operacao: this.dataOperacao,
       nome_evento: this.nomeEvento,
-      responsavel_evento: this.responsavelEvento,
-      horario_pauta: this.horarioPauta || null,
+      responsavel_evento: this.isMultiOperador ? null : this.responsavelEvento,
+      horario_pauta: this.isMultiOperador ? null : (this.horarioPauta || null),
       hora_inicio: this.horaInicio,
-      hora_fim: this.eventoEncerrado ? this.horaFim : null,
-      hora_entrada: this.horaEntrada || null,
-      hora_saida: this.horaSaida || null,
+      hora_fim: this.isMultiOperador ? this.horaFim : (this.eventoEncerrado ? this.horaFim : null),
+      hora_entrada: this.isMultiOperador ? null : (this.horaEntrada || null),
+      hora_saida: this.isMultiOperador ? null : (this.horaSaida || null),
       usb_01: this.usb01 || null,
       usb_02: this.usb02 || null,
       observacoes: this.observacoes || null,
       houve_anormalidade: this.houveAnormalidade,
       tipo_evento: tipoEvento,
     };
+
+    if (this.isMultiOperador && !this.editMode()) {
+      payload['operadores_ids'] = this.selectedOperadorIds;
+      payload['suspensoes'] = this.suspensoes.filter(s => s.hora_suspensao || s.hora_reabertura);
+    }
+
+    return payload;
   }
 
   // ═══ HELPERS ═══

@@ -21,4 +21,7 @@ public class Sala extends AuditableEntity {
     private Boolean ativo = true;
 
     private Integer ordem;
+
+    @Column(name = "MULTI_OPERADOR", nullable = false)
+    private Boolean multiOperador = false;
 }

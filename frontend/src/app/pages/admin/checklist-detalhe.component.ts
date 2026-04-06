@@ -79,10 +79,27 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 
         <!-- 4) Responsável -->
         <h3>4) Responsável</h3>
-        <div class="field">
-          <label>Verificado por</label>
-          <div class="field-value">{{ data()!['operador_nome'] }}</div>
-        </div>
+        @if (data()!['operadores_cabine'] || data()!['operadores_plenario']) {
+          <div class="field-grid two-cols">
+            <div class="field">
+              <label>Cabine</label>
+              <div class="field-value">{{ asStringArray(data()!['operadores_cabine']).join(', ') || '-' }}</div>
+            </div>
+            <div class="field">
+              <label>Plenário</label>
+              <div class="field-value">{{ asStringArray(data()!['operadores_plenario']).join(', ') || '-' }}</div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Preenchido por</label>
+            <div class="field-value">{{ data()!['operador_nome'] }}</div>
+          </div>
+        } @else {
+          <div class="field">
+            <label>Verificado por</label>
+            <div class="field-value">{{ data()!['operador_nome'] }}</div>
+          </div>
+        }
 
         <!-- Ações -->
         <div class="detalhe-actions">
@@ -155,6 +172,8 @@ export class ChecklistDetalheComponent implements OnInit {
     const s = diff % 60;
     return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
+
+  asStringArray(v: unknown): string[] { return Array.isArray(v) ? v : []; }
 
   fechar(): void { window.close(); }
 

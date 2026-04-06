@@ -155,7 +155,39 @@ interface EditItem {
           </div>
           <div style="display:flex; justify-content:space-between">
             <a routerLink="/home" class="btn-secondary-custom">&larr; Voltar</a>
-            <button class="btn-primary-custom" [disabled]="!salaId" (click)="startWizard()">Avançar &rarr;</button>
+            <button class="btn-primary-custom" [disabled]="!salaId" (click)="isMultiOperador ? step.set('operadores') : startWizard()">Avançar &rarr;</button>
+          </div>
+        }
+
+        @if (step() === 'operadores') {
+          <p class="text-muted-sm">Selecione os operadores da verificação.</p>
+          <div class="form-row" style="margin-bottom:14px">
+            <label style="font-weight:600; margin-bottom:8px">Cabine</label>
+            <div class="checkbox-list">
+              @for (op of lookup.operadoresPlenario(); track op.id) {
+                <label class="checkbox-item">
+                  <input type="checkbox" [checked]="selectedCabine.includes(op.id + '')"
+                    (change)="toggleOperador('cabine', op.id + '', $event)">
+                  {{ op.nome_completo }}
+                </label>
+              }
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom:14px">
+            <label style="font-weight:600; margin-bottom:8px">Plenário</label>
+            <div class="checkbox-list">
+              @for (op of lookup.operadoresPlenario(); track op.id) {
+                <label class="checkbox-item">
+                  <input type="checkbox" [checked]="selectedPlenario.includes(op.id + '')"
+                    (change)="toggleOperador('plenario', op.id + '', $event)">
+                  {{ op.nome_completo }}
+                </label>
+              }
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between">
+            <button class="btn-secondary-custom" (click)="step.set('setup')">&larr; Voltar</button>
+            <button class="btn-primary-custom" [disabled]="selectedCabine.length === 0 && selectedPlenario.length === 0" (click)="startWizard()">Avançar &rarr;</button>
           </div>
         }
 
@@ -263,6 +295,14 @@ interface EditItem {
       margin-top: 6px; padding: 6px 12px; font-size: .85rem;
       background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 6px;
     }
+    .checkbox-list { display: flex; flex-direction: column; gap: 6px; }
+    .checkbox-item {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: .9rem; font-weight: 500;
+      &:hover { background: #f8fafc; }
+      input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    }
     .edit-radios { display: flex; gap: 8px; margin-top: 6px; }
     .radio-card-sm {
       display: flex; align-items: center; gap: 4px;
@@ -289,7 +329,7 @@ export class ChecklistWizardComponent implements OnInit {
   private checklistId = 0;
 
   // ── Wizard (modo novo) ──
-  step = signal<'setup' | 'wizard' | 'finish'>('setup');
+  step = signal<'setup' | 'operadores' | 'wizard' | 'finish'>('setup');
   dataOperacao = new Date().toISOString().split('T')[0];
   salaId = '';
   salaNome = '';
@@ -307,6 +347,22 @@ export class ChecklistWizardComponent implements OnInit {
 
   currentItem = signal<ChecklistItem | null>(null);
 
+  // ── Multi-operador (Plenário Principal) ──
+  isMultiOperador = false;
+  selectedCabine: string[] = [];
+  selectedPlenario: string[] = [];
+
+  toggleOperador(grupo: 'cabine' | 'plenario', id: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const arr = grupo === 'cabine' ? this.selectedCabine : this.selectedPlenario;
+    if (checked) {
+      if (!arr.includes(id)) arr.push(id);
+    } else {
+      const idx = arr.indexOf(id);
+      if (idx >= 0) arr.splice(idx, 1);
+    }
+  }
+
   // ── Rascunho (localStorage) ──
   private readonly DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 horas
 
@@ -316,7 +372,7 @@ export class ChecklistWizardComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.lookup.loadSalas();
+    this.lookup.loadSalasOperador();
 
     this.route.queryParams.subscribe(params => {
       const cid = params['checklist_id'];
@@ -488,7 +544,13 @@ export class ChecklistWizardComponent implements OnInit {
 
   // ═══ MODO NOVO (wizard) ═══
 
-  onSalaChange(): void {}
+  onSalaChange(): void {
+    const sala = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    this.isMultiOperador = sala?.multi_operador === true;
+    if (this.isMultiOperador) {
+      this.lookup.loadOperadoresPlenario();
+    }
+  }
 
   startWizard(): void {
     if (!this.salaId) return;
@@ -520,6 +582,8 @@ export class ChecklistWizardComponent implements OnInit {
     const item = this.currentItem();
     if (!item) return false;
     if (item.tipo_widget === 'text') return true;
+    // Multi-operador: pode avançar sem marcar (validação final no submit)
+    if (this.isMultiOperador && !this.radioValue) return true;
     if (!this.radioValue) return false;
     if (this.radioValue === 'Falha' && this.falhaDesc.trim().length < 10) return false;
     return true;
@@ -551,7 +615,7 @@ export class ChecklistWizardComponent implements OnInit {
       this.currentIndex.update(i => i - 1);
       this.loadCurrentItem();
     } else {
-      this.step.set('setup');
+      this.step.set(this.isMultiOperador ? 'operadores' : 'setup');
     }
   }
 
@@ -564,13 +628,28 @@ export class ChecklistWizardComponent implements OnInit {
 
   submit(): void {
     if (this.saving()) return; // Proteção contra duplo clique
+
+    // Multi-operador: validar que todos os itens foram marcados
+    if (this.isMultiOperador) {
+      const faltantes: string[] = [];
+      for (const item of this.itens()) {
+        const resp = this.respostas[item.id];
+        if (item.tipo_widget === 'text') continue;
+        if (!resp || !resp.status) faltantes.push(item.nome);
+      }
+      if (faltantes.length > 0) {
+        alert('Itens sem marcação:\n\n' + faltantes.map(n => '• ' + n).join('\n'));
+        return;
+      }
+    }
+
     this.saving.set(true);
 
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const hhmmss = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       data_operacao: this.dataOperacao,
       sala_id: parseInt(this.salaId, 10),
       hora_inicio_testes: this.startTime ? hhmmss(this.startTime) : null,
@@ -578,6 +657,11 @@ export class ChecklistWizardComponent implements OnInit {
       observacoes: this.observacoes || null,
       itens: Object.values(this.respostas),
     };
+
+    if (this.isMultiOperador) {
+      payload['operadores_cabine'] = this.selectedCabine;
+      payload['operadores_plenario'] = this.selectedPlenario;
+    }
 
     this.api.post<any>('/api/forms/checklist/registro', payload).subscribe({
       next: res => {

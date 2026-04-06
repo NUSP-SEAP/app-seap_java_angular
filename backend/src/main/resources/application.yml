@@ -16,6 +16,17 @@ spring:
         default_schema: NUSP
         format_sql: true
     show-sql: false
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.hostinger.com}
+    port: ${SPRING_MAIL_PORT:465}
+    username: ${SPRING_MAIL_USERNAME:no-reply@senado-nusp.cloud}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
   jackson:
     default-property-inclusion: non_null
 
@@ -31,6 +42,9 @@ app:
     dir: ${FILES_DIR:/home/douglas/senado-nusp/files}
     url-prefix: ${FILES_URL_PREFIX:/files/}
     operadores-dirname: operadores
+  password-reset:
+    token-ttl-minutes: ${PASSWORD_RESET_TTL_MIN:30}
+    base-url: ${APP_BASE_URL:http://localhost:4200}
   admin:
     supervisor-username: ${ADMIN_SUPERVISOR_USERNAME:emanoel}
     chefe-username: ${ADMIN_CHEFE_USERNAME:evandrop}

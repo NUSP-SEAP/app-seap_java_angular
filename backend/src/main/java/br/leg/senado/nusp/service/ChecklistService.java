@@ -1,15 +1,10 @@
 package br.leg.senado.nusp.service;
 
-import br.leg.senado.nusp.entity.Checklist;
-import br.leg.senado.nusp.entity.ChecklistHistorico;
-import br.leg.senado.nusp.entity.ChecklistItemTipo;
-import br.leg.senado.nusp.entity.ChecklistResposta;
+import br.leg.senado.nusp.entity.*;;
 import br.leg.senado.nusp.enums.StatusResposta;
 import br.leg.senado.nusp.enums.Turno;
 import br.leg.senado.nusp.exception.ServiceValidationException;
-import br.leg.senado.nusp.repository.ChecklistItemTipoRepository;
-import br.leg.senado.nusp.repository.ChecklistRepository;
-import br.leg.senado.nusp.repository.ChecklistRespostaRepository;
+import br.leg.senado.nusp.repository.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -31,6 +26,8 @@ public class ChecklistService {
     private final ChecklistRepository checklistRepo;
     private final ChecklistRespostaRepository respostaRepo;
     private final ChecklistItemTipoRepository itemTipoRepo;
+    private final ChecklistOperadorRepository checklistOperadorRepo;
+    private final SalaRepository salaRepo;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
 
@@ -180,6 +177,32 @@ public class ChecklistService {
             resp.setAtualizadoPor(userId);
             respostaRepo.save(resp);
             totalRespostas++;
+        }
+
+        // Salvar operadores da junction table (Plenário Principal)
+        Sala sala = salaRepo.findById(salaId).orElse(null);
+        if (sala != null && Boolean.TRUE.equals(sala.getMultiOperador())) {
+            @SuppressWarnings("unchecked")
+            List<String> cabineOps = body.get("operadores_cabine") instanceof List
+                    ? (List<String>) body.get("operadores_cabine") : List.of();
+            @SuppressWarnings("unchecked")
+            List<String> plenarioOps = body.get("operadores_plenario") instanceof List
+                    ? (List<String>) body.get("operadores_plenario") : List.of();
+
+            for (String opId : cabineOps) {
+                ChecklistOperador co = new ChecklistOperador();
+                co.setChecklistId(checklist.getId());
+                co.setOperadorId(opId);
+                co.setPapel("CABINE");
+                checklistOperadorRepo.save(co);
+            }
+            for (String opId : plenarioOps) {
+                ChecklistOperador co = new ChecklistOperador();
+                co.setChecklistId(checklist.getId());
+                co.setOperadorId(opId);
+                co.setPapel("PLENARIO");
+                checklistOperadorRepo.save(co);
+            }
         }
 
         return Map.of("checklist_id", checklist.getId(), "total_respostas", totalRespostas);

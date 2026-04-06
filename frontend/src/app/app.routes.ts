@@ -3,6 +3,8 @@ import { authGuard, adminGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   { path: 'login', loadComponent: () => import('./pages/login/login.component').then(m => m.LoginComponent) },
+  { path: 'forgot-password', loadComponent: () => import('./pages/login/forgot-password.component').then(m => m.ForgotPasswordComponent) },
+  { path: 'reset-password', loadComponent: () => import('./pages/login/reset-password.component').then(m => m.ResetPasswordComponent) },
   {
     path: '',
     loadComponent: () => import('./layout/main-layout.component').then(m => m.MainLayoutComponent),

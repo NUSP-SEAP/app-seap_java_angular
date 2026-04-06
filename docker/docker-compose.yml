@@ -14,6 +14,8 @@ services:
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
       APP_USER: ${ORACLE_APP_USER}
       APP_USER_PASSWORD: ${ORACLE_APP_PASSWORD}
+    ports:
+      - "1521:1521"
     volumes:
       - oracle-xe-java-data:/opt/oracle/oradata
       - ./oracle-init:/container-entrypoint-initdb.d
@@ -42,6 +44,11 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       FILES_DIR: /app/files
       FILES_URL_PREFIX: /files/
+      SPRING_MAIL_HOST: smtp.hostinger.com
+      SPRING_MAIL_PORT: "465"
+      SPRING_MAIL_USERNAME: no-reply@senado-nusp.cloud
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      APP_BASE_URL: https://java.senado-nusp.cloud
     volumes:
       - nusp-files:/app/files
 

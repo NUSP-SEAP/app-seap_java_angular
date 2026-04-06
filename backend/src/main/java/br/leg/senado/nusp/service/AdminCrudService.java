@@ -55,7 +55,7 @@ public class AdminCrudService {
     @Transactional
     public Map<String, Object> criarOperador(String nomeCompleto, String nomeExibicao,
                                               String email, String username, String senha,
-                                              MultipartFile foto) {
+                                              MultipartFile foto, boolean plenarioPrincipal) {
         List<String> faltantes = new ArrayList<>();
         if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
         if (isBlank(nomeExibicao)) faltantes.add("nome_exibicao");
@@ -93,6 +93,7 @@ public class AdminCrudService {
         op.setUsername(username);
         op.setPasswordHash(passwordEncoder.encode(senha));
         op.setFotoUrl(fotoUrl.isEmpty() ? null : fotoUrl);
+        op.setPlenarioPrincipal(plenarioPrincipal);
         op = operadorRepo.save(op);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -441,6 +442,19 @@ public class AdminCrudService {
         }
 
         return new int[]{created, updated};
+    }
+
+    // ══ Toggle Plenário Principal ═════════════════════════════════
+
+    @Transactional
+    public boolean togglePlenarioPrincipal(String operadorId) {
+        Operador op = operadorRepo.findById(operadorId)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        boolean novo = !Boolean.TRUE.equals(op.getPlenarioPrincipal());
+        op.setPlenarioPrincipal(novo);
+        operadorRepo.save(op);
+        return novo;
     }
 
     // ══ Alterar Senha de Operador ════════════════════════════════

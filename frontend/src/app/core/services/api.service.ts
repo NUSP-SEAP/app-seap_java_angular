@@ -55,6 +55,11 @@ export class ApiService {
     return this.http.put<T>(this.url(endpoint), body);
   }
 
+  /** PATCH JSON. */
+  patch<T = ApiResponse>(endpoint: string, body: unknown): Observable<T> {
+    return this.http.patch<T>(this.url(endpoint), body);
+  }
+
   /** POST multipart (upload de arquivo). */
   postForm<T = ApiResponse>(endpoint: string, formData: FormData): Observable<T> {
     return this.http.post<T>(this.url(endpoint), formData);

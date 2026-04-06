@@ -1,11 +1,8 @@
 package br.leg.senado.nusp.service;
 
-import br.leg.senado.nusp.entity.RegistroOperacaoAudio;
-import br.leg.senado.nusp.entity.RegistroOperacaoOperador;
-import br.leg.senado.nusp.entity.RegistroOperacaoOperadorHistorico;
+import br.leg.senado.nusp.entity.*;
 import br.leg.senado.nusp.exception.ServiceValidationException;
-import br.leg.senado.nusp.repository.RegistroOperacaoAudioRepository;
-import br.leg.senado.nusp.repository.RegistroOperacaoOperadorRepository;
+import br.leg.senado.nusp.repository.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -29,6 +26,9 @@ public class OperacaoService {
 
     private final RegistroOperacaoAudioRepository audioRepo;
     private final RegistroOperacaoOperadorRepository entradaRepo;
+    private final EntradaOperadorRepository entradaOperadorRepo;
+    private final SuspensaoRepository suspensaoRepo;
+    private final SalaRepository salaRepo;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
 
@@ -314,7 +314,49 @@ public class OperacaoService {
         entrada.setAtualizadoPor(userId);
         entrada = entradaRepo.save(entrada);
 
-        if (horaFim != null) audioRepo.finalizarSessao(registroId, userId);
+        // Multi-operador: salvar junction table + suspensões + auto-encerrar
+        Sala sala = salaRepo.findById(salaId).orElse(null);
+        boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
+
+        if (isMultiOp) {
+            @SuppressWarnings("unchecked")
+            List<String> operadoresIds = body.get("operadores_ids") instanceof List
+                    ? (List<String>) body.get("operadores_ids") : List.of();
+            // Sempre incluir o criador
+            if (!operadoresIds.contains(userId)) {
+                operadoresIds = new ArrayList<>(operadoresIds);
+                operadoresIds.add(0, userId);
+            }
+            for (String opId : operadoresIds) {
+                EntradaOperador eo = new EntradaOperador();
+                eo.setEntradaId(entrada.getId());
+                eo.setOperadorId(opId);
+                entradaOperadorRepo.save(eo);
+            }
+
+            // Salvar suspensões
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> suspensoes = body.get("suspensoes") instanceof List
+                    ? (List<Map<String, Object>>) body.get("suspensoes") : List.of();
+            int ordemSusp = 1;
+            for (Map<String, Object> susp : suspensoes) {
+                String hs = normalizeTime(susp.get("hora_suspensao") != null ? susp.get("hora_suspensao").toString() : "");
+                String hr = normalizeTime(susp.get("hora_reabertura") != null ? susp.get("hora_reabertura").toString() : "");
+                if (hs != null || hr != null) {
+                    Suspensao s = new Suspensao();
+                    s.setEntradaId(entrada.getId());
+                    s.setHoraSuspensao(hs);
+                    s.setHoraReabertura(hr);
+                    s.setOrdem(ordemSusp++);
+                    suspensaoRepo.save(s);
+                }
+            }
+
+            // Plenário Principal: sempre encerrar automaticamente
+            audioRepo.finalizarSessao(registroId, userId);
+        } else {
+            if (horaFim != null) audioRepo.finalizarSessao(registroId, userId);
+        }
 
         String houveAnomRaw = clean(body, "houve_anormalidade");
         boolean houveAnom = "sim".equalsIgnoreCase(houveAnomRaw);
@@ -339,10 +381,20 @@ public class OperacaoService {
         String horaInicio = normalizeTime(clean(body, "hora_inicio"));
         String responsavelEvento = blankToNull(clean(body, "responsavel_evento"));
 
+        // Verificar se é multi-operador para relaxar validações
+        Long regId = entradaRepo.findRegistroIdByEntradaId(entradaId).orElse(0L);
+        boolean isMultiOp = false;
+        if (regId > 0) {
+            List<?> salaCheck = entityManager.createNativeQuery(
+                "SELECT s.MULTI_OPERADOR FROM OPR_REGISTRO_AUDIO r JOIN CAD_SALA s ON s.ID = r.SALA_ID WHERE r.ID = ?1")
+                .setParameter(1, regId).getResultList();
+            isMultiOp = !salaCheck.isEmpty() && ((Number) salaCheck.get(0)).intValue() == 1;
+        }
+
         Map<String, String> errors = new LinkedHashMap<>();
         if (nomeEvento == null) errors.put("nome_evento", "Campo obrigatório.");
         if (horaInicio == null) errors.put("hora_inicio", "Campo obrigatório.");
-        if (responsavelEvento == null) errors.put("responsavel_evento", "Campo obrigatório.");
+        if (!isMultiOp && responsavelEvento == null) errors.put("responsavel_evento", "Campo obrigatório.");
         if (!errors.isEmpty()) throw new ServiceValidationException("Erro de validação.");
 
         String horarioPauta = normalizeTime(clean(body, "horario_pauta"));

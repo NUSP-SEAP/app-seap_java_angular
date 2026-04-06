@@ -36,10 +36,11 @@ public class AdminCrudController {
             @RequestParam(value = "email", required = false) String email,
             @RequestParam(value = "username", required = false) String username,
             @RequestParam(value = "senha", required = false) String senha,
-            @RequestParam(value = "foto", required = false) MultipartFile foto) {
+            @RequestParam(value = "foto", required = false) MultipartFile foto,
+            @RequestParam(value = "plenario_principal", required = false, defaultValue = "false") boolean plenarioPrincipal) {
 
         Map<String, Object> operador = crudService.criarOperador(
-                nomeCompleto, nomeExibicao, email, username, senha, foto);
+                nomeCompleto, nomeExibicao, email, username, senha, foto, plenarioPrincipal);
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("ok", true);
@@ -80,6 +81,14 @@ public class AdminCrudController {
         }
         crudService.changeOperadorPassword(id, novaSenha);
         return ResponseEntity.ok(Map.of("ok", true, "message", "Senha alterada com sucesso."));
+    }
+
+    // ══ Toggle Plenário Principal ══════════════════════════════
+
+    @PatchMapping("/operador/{id}/toggle-plenario")
+    public ResponseEntity<?> togglePlenario(@PathVariable String id) {
+        boolean novoValor = crudService.togglePlenarioPrincipal(id);
+        return ResponseEntity.ok(Map.of("ok", true, "plenario_principal", novoValor));
     }
 
     // ══ Form Edit — Listar ══════════════════════════════════════

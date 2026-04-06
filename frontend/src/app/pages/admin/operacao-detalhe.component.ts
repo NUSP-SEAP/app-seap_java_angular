@@ -108,11 +108,34 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
           </div>
         </div>
 
-        <!-- Operador Responsável -->
-        <div class="field">
-          <label>Operador Responsável</label>
-          <div class="field-value">{{ d()!['operador_nome'] }}</div>
-        </div>
+        <!-- Operadores -->
+        @if (d()!['operadores_sessao']) {
+          <div class="field">
+            <label>Operadores da Sessão</label>
+            <div class="field-value">{{ asArray(d()!['operadores_sessao']).join(', ') }}</div>
+          </div>
+          <div class="field">
+            <label>Preenchido por</label>
+            <div class="field-value">{{ d()!['operador_nome'] }}</div>
+          </div>
+        } @else {
+          <div class="field">
+            <label>Operador Responsável</label>
+            <div class="field-value">{{ d()!['operador_nome'] }}</div>
+          </div>
+        }
+
+        <!-- Suspensões -->
+        @if (d()!['suspensoes']) {
+          <div class="field">
+            <label>Suspensões</label>
+            @for (s of asArray(d()!['suspensoes']); track $index) {
+              <div class="field-value" style="margin-bottom:4px">
+                Suspende: {{ s['hora_suspensao'] }} &mdash; Reabre: {{ s['hora_reabertura'] }}
+              </div>
+            }
+          </div>
+        }
 
         <!-- Ações -->
         <div class="detalhe-actions">
@@ -146,6 +169,7 @@ export class OperacaoDetalheComponent implements OnInit {
     });
   }
 
+  asArray(v: unknown): any[] { return Array.isArray(v) ? v : []; }
   fechar(): void { window.close(); }
   imprimir(): void { window.print(); }
 }

@@ -35,7 +35,8 @@ public class OperadorDashboardService {
                 "WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Ok' AND t.TIPO_WIDGET != 'text') AS qtde_ok, " +
                 "(SELECT COUNT(*) FROM FRM_CHECKLIST_RESPOSTA r JOIN FRM_CHECKLIST_ITEM_TIPO t ON t.ID = r.ITEM_TIPO_ID " +
                 "WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha' AND t.TIPO_WIDGET != 'text') AS qtde_falha",
-                "FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID WHERE c.CRIADO_POR = '" + userId + "'",
+                "FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID " +
+                "WHERE (c.CRIADO_POR = '" + userId + "' OR EXISTS (SELECT 1 FROM FRM_CHECKLIST_OPERADOR co WHERE co.CHECKLIST_ID = c.ID AND co.OPERADOR_ID = '" + userId + "'))",
                 "c.DATA_OPERACAO", MC_SORT, List.of("s.NOME"),
                 Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME"),
                 Map.of("data", "date", "sala", "text"),
@@ -47,10 +48,12 @@ public class OperadorDashboardService {
         @SuppressWarnings("unchecked")
         List<Object> rows = em.createNativeQuery("""
                 SELECT c.CRIADO_POR FROM FRM_CHECKLIST c WHERE c.ID = ?1
+                UNION
+                SELECT co.OPERADOR_ID FROM FRM_CHECKLIST_OPERADOR co WHERE co.CHECKLIST_ID = ?1
                 """).setParameter(1, checklistId).getResultList();
         if (rows.isEmpty()) throw new ServiceValidationException("Checklist não encontrado.", HttpStatus.NOT_FOUND);
-        String owner = rows.get(0) != null ? rows.get(0).toString() : "";
-        if (!owner.equals(userId)) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        boolean isOwner = rows.stream().anyMatch(r -> r != null && userId.equals(r.toString()));
+        if (!isOwner) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
 
         // Reutiliza o detalhe do admin
         List<Object[]> detRows = em.createNativeQuery("""
@@ -109,7 +112,7 @@ public class OperadorDashboardService {
                 "JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID " +
                 "JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
                 "LEFT JOIN OPR_ANORMALIDADE a ON a.ENTRADA_ID = e.ID " +
-                "WHERE e.OPERADOR_ID = '" + userId + "'",
+                "WHERE (e.OPERADOR_ID = '" + userId + "' OR EXISTS (SELECT 1 FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = e.ID AND eo.OPERADOR_ID = '" + userId + "'))",
                 "r.DATA", MO_SORT, List.of("s.NOME", "e.NOME_EVENTO"),
                 Map.of("data", "r.DATA", "sala", "s.NOME"),
                 Map.of("data", "date", "sala", "text"),
@@ -121,10 +124,12 @@ public class OperadorDashboardService {
         @SuppressWarnings("unchecked")
         List<Object> rows = em.createNativeQuery("""
                 SELECT e.OPERADOR_ID FROM OPR_REGISTRO_ENTRADA e WHERE e.ID = ?1
+                UNION
+                SELECT eo.OPERADOR_ID FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = ?1
                 """).setParameter(1, entradaId).getResultList();
         if (rows.isEmpty()) throw new ServiceValidationException("Operação não encontrada.", HttpStatus.NOT_FOUND);
-        String owner = rows.get(0) != null ? rows.get(0).toString() : "";
-        if (!owner.equals(userId)) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        boolean isOwner = rows.stream().anyMatch(r -> r != null && userId.equals(r.toString()));
+        if (!isOwner) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
 
         List<Object[]> detRows = em.createNativeQuery("""
                 SELECT e.ID, r.DATA, s.NOME AS SALA_NOME, e.NOME_EVENTO,

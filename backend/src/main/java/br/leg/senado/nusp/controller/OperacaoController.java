@@ -1,7 +1,11 @@
 package br.leg.senado.nusp.controller;
 
+import br.leg.senado.nusp.entity.Operador;
+import br.leg.senado.nusp.entity.Sala;
 import br.leg.senado.nusp.exception.ServiceValidationException;
+import br.leg.senado.nusp.repository.OperadorRepository;
 import br.leg.senado.nusp.repository.RegistroOperacaoOperadorRepository;
+import br.leg.senado.nusp.repository.SalaRepository;
 import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.OperacaoService;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,6 +29,51 @@ public class OperacaoController {
 
     private final OperacaoService operacaoService;
     private final RegistroOperacaoOperadorRepository entradaRepo;
+    private final OperadorRepository operadorRepo;
+    private final SalaRepository salaRepo;
+
+    // ══ Lookups autenticados para operadores ═════════════════════
+
+    /**
+     * GET /api/operacao/lookup/salas
+     * Retorna salas filtradas: se operador não tem PLENARIO_PRINCIPAL,
+     * esconde salas com MULTI_OPERADOR=true.
+     * Inclui flag multi_operador para o frontend adaptar o formulário.
+     */
+    @GetMapping("/operacao/lookup/salas")
+    public ResponseEntity<?> salasParaOperador(@AuthenticationPrincipal UserPrincipal principal) {
+        Operador op = operadorRepo.findById(principal.getId()).orElse(null);
+        boolean isPlenario = op != null && Boolean.TRUE.equals(op.getPlenarioPrincipal());
+        List<Sala> salas = isPlenario
+                ? salaRepo.findAtivasOrdenadas()
+                : salaRepo.findAtivasOrdenadasSemMultiOperador();
+        List<Map<String, Object>> data = salas.stream().map(s -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", String.valueOf(s.getId()));
+            m.put("nome", s.getNome());
+            m.put("multi_operador", Boolean.TRUE.equals(s.getMultiOperador()));
+            return m;
+        }).toList();
+        return ResponseEntity.ok(Map.of("ok", true, "data", data));
+    }
+
+    /**
+     * GET /api/operacao/lookup/operadores-plenario
+     * Retorna operadores com PLENARIO_PRINCIPAL=true (para multi-select).
+     */
+    @GetMapping("/operacao/lookup/operadores-plenario")
+    public ResponseEntity<?> operadoresPlenario() {
+        List<Map<String, Object>> data = operadorRepo.findOperadoresPlenarioPrincipal()
+                .stream().map(o -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", o.getId());
+                    m.put("nome_completo", o.getNomeCompleto());
+                    return m;
+                }).toList();
+        return ResponseEntity.ok(Map.of("ok", true, "data", data));
+    }
+
+    // ══ Operação de Áudio ═══════════════════════════════════════
 
     /**
      * GET /api/operacao/audio/estado-sessao?sala_id=...

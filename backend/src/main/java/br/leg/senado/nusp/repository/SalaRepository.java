@@ -15,6 +15,10 @@ public interface SalaRepository extends JpaRepository<Sala, Integer> {
     @Query("SELECT s FROM Sala s WHERE s.ativo = true ORDER BY COALESCE(s.ordem, 9999), s.nome ASC")
     List<Sala> findAtivasOrdenadas();
 
+    /** Salas ativas SEM multi-operador (para operadores comuns) */
+    @Query("SELECT s FROM Sala s WHERE s.ativo = true AND s.multiOperador = false ORDER BY COALESCE(s.ordem, 9999), s.nome ASC")
+    List<Sala> findAtivasOrdenadasSemMultiOperador();
+
     /** Para form-edit: retorna TODAS (ativas primeiro, depois inativas). */
     @Query("SELECT s FROM Sala s ORDER BY s.ativo DESC, COALESCE(s.ordem, 9999) ASC, s.nome ASC, s.id ASC")
     List<Sala> findAllOrdered();

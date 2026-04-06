@@ -31,7 +31,7 @@ public class AdminDashboardService {
     public PagedResult listOperadores(int page, int limit, String search, String sort, String dir,
                                        Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
-                "o.ID, o.NOME_COMPLETO, o.EMAIL",
+                "o.ID, o.NOME_COMPLETO, o.EMAIL, o.PLENARIO_PRINCIPAL",
                 "FROM PES_OPERADOR o",
                 null, OP_SORT, List.of("o.NOME_COMPLETO", "o.EMAIL"),
                 Map.of("nome", "o.NOME_COMPLETO", "email", "o.EMAIL"),
@@ -103,6 +103,26 @@ public class AdminDashboardService {
                     "tipo_widget", str(it[7]) != null ? str(it[7]) : "radio"));
         }
         result.put("itens", itensList);
+
+        // Operadores do Plenário Principal (junction table)
+        @SuppressWarnings("unchecked")
+        List<Object[]> opRows = em.createNativeQuery("""
+                SELECT co.PAPEL, o.NOME_COMPLETO
+                FROM FRM_CHECKLIST_OPERADOR co
+                JOIN PES_OPERADOR o ON o.ID = co.OPERADOR_ID
+                WHERE co.CHECKLIST_ID = ?1
+                ORDER BY co.PAPEL, o.NOME_COMPLETO
+                """).setParameter(1, checklistId).getResultList();
+        List<String> cabine = new ArrayList<>(), plenario = new ArrayList<>();
+        for (Object[] op : opRows) {
+            if ("CABINE".equals(str(op[0]))) cabine.add(str(op[1]));
+            else plenario.add(str(op[1]));
+        }
+        if (!cabine.isEmpty() || !plenario.isEmpty()) {
+            result.put("operadores_cabine", cabine);
+            result.put("operadores_plenario", plenario);
+        }
+
         return result;
     }
 
@@ -179,6 +199,34 @@ public class AdminDashboardService {
         result.put("hora_saida", str(r[18])); result.put("houve_anormalidade", boolVal(r[19]));
         result.put("editado", boolVal(r[20])); result.put("sala_id", num(r[21]));
         result.put("comissao_nome", str(r[22]));
+
+        // Operadores da junction table (Plenário Principal)
+        @SuppressWarnings("unchecked")
+        List<Object> opRows = em.createNativeQuery("""
+                SELECT o.NOME_COMPLETO
+                FROM OPR_ENTRADA_OPERADOR eo
+                JOIN PES_OPERADOR o ON o.ID = eo.OPERADOR_ID
+                WHERE eo.ENTRADA_ID = ?1
+                ORDER BY o.NOME_COMPLETO
+                """).setParameter(1, entradaId).getResultList();
+        if (!opRows.isEmpty()) {
+            result.put("operadores_sessao", opRows.stream().map(o -> o != null ? o.toString() : "").toList());
+        }
+
+        // Suspensões
+        @SuppressWarnings("unchecked")
+        List<Object[]> suspRows = em.createNativeQuery("""
+                SELECT HORA_SUSPENSAO, HORA_REABERTURA, ORDEM
+                FROM OPR_SUSPENSAO WHERE ENTRADA_ID = ?1 ORDER BY ORDEM
+                """).setParameter(1, entradaId).getResultList();
+        if (!suspRows.isEmpty()) {
+            List<Map<String, Object>> suspList = new ArrayList<>();
+            for (Object[] sr : suspRows) {
+                suspList.add(Map.of("hora_suspensao", str(sr[0]), "hora_reabertura", str(sr[1]), "ordem", num(sr[2])));
+            }
+            result.put("suspensoes", suspList);
+        }
+
         return result;
     }
 

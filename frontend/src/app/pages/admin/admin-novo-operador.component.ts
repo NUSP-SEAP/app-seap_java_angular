@@ -20,6 +20,10 @@ import { ApiService } from '../../core/services/api.service';
           <div class="form-row"><label>Senha *</label><input type="password" [(ngModel)]="senha" name="senha" required minlength="6"></div>
           <div class="form-row"><label>Confirmar Senha *</label><input type="password" [(ngModel)]="confirmarSenha" name="confirmar_senha" required></div>
         </div>
+        <div class="form-row" style="display:flex; align-items:center; gap:8px; margin-top:4px">
+          <input type="checkbox" [(ngModel)]="plenarioPrincipal" name="plenario_principal" id="plenario_principal">
+          <label for="plenario_principal" style="margin:0; cursor:pointer">Operador de Plenário Principal</label>
+        </div>
         <div class="form-row">
           <label>Foto (opcional)</label>
           <input type="file" (change)="onFileSelect($event)" accept="image/*">
@@ -48,7 +52,7 @@ export class AdminNovoOperadorComponent {
   private api = inject(ApiService);
   private router = inject(Router);
 
-  nomeCompleto=''; nomeExibicao=''; email=''; username=''; senha=''; confirmarSenha='';
+  nomeCompleto=''; nomeExibicao=''; email=''; username=''; senha=''; confirmarSenha=''; plenarioPrincipal=false;
   foto: File | null = null;
   saving = signal(false);
   errorMsg = signal('');
@@ -71,6 +75,7 @@ export class AdminNovoOperadorComponent {
     fd.append('email', this.email);
     fd.append('username', this.username);
     fd.append('senha', this.senha);
+    fd.append('plenario_principal', String(this.plenarioPrincipal));
     if (this.foto) fd.append('foto', this.foto);
 
     this.api.postForm<any>('/api/admin/operadores/novo', fd).subscribe({
