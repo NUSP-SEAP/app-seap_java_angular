@@ -1,0 +1,21 @@
+# =============================================================
+# Senado NUSP — Frontend (Angular 21 + Nginx)
+# Build multistage: compila com Node + serve com Nginx
+# =============================================================
+
+# --- Stage 1: Build ---
+FROM node:22-slim AS build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --quiet
+COPY frontend/ .
+RUN npx ng build --configuration production
+
+# --- Stage 2: Runtime ---
+FROM nginx:alpine
+COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
