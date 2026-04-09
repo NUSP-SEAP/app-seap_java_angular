@@ -260,6 +260,20 @@ public class OperacaoService {
         }
 
         // ── CRIAÇÃO ──
+
+        // Proteção contra duplicação: mesmo operador + mesma sala em < 5 min
+        Number dupCheck = (Number) entityManager.createNativeQuery("""
+                SELECT CASE WHEN EXISTS (
+                    SELECT 1 FROM OPR_REGISTRO_AUDIO
+                    WHERE SALA_ID = ?1 AND CRIADO_POR = ?2
+                    AND CRIADO_EM >= SYSTIMESTAMP - INTERVAL '5' MINUTE
+                ) THEN 1 ELSE 0 END FROM DUAL
+                """).setParameter(1, salaId).setParameter(2, userId).getSingleResult();
+        if (dupCheck.intValue() == 1) {
+            throw new ServiceValidationException(
+                "Já existe um registro de operação seu para esta sala enviado há menos de 5 minutos. Aguarde antes de enviar novamente.");
+        }
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> entradasOp = (List<Map<String, Object>>) estado.get("entradas_operador");
         if (entradasOp.size() >= 2) throw new ServiceValidationException("Este operador já possui 2 entradas nesta sessão.");
@@ -514,6 +528,44 @@ public class OperacaoService {
         if (novoSalaId != null) {
             entradaRepo.marcarSalaEditado(entradaId, novoSalaId);
             audioRepo.updateSalaByEntrada(entradaId, novoSalaId);
+        }
+
+        // Atualizar suspensões se multi-operador
+        if (isMultiOp && body.containsKey("suspensoes")) {
+            suspensaoRepo.deleteByEntradaId(entradaId);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> suspensoes = body.get("suspensoes") instanceof List
+                    ? (List<Map<String, Object>>) body.get("suspensoes") : List.of();
+            int ordemSusp = 1;
+            for (Map<String, Object> susp : suspensoes) {
+                String hs = normalizeTime(susp.get("hora_suspensao") != null ? susp.get("hora_suspensao").toString() : "");
+                String hr = normalizeTime(susp.get("hora_reabertura") != null ? susp.get("hora_reabertura").toString() : "");
+                if (hs != null || hr != null) {
+                    Suspensao s = new Suspensao();
+                    s.setEntradaId(entradaId);
+                    s.setHoraSuspensao(hs);
+                    s.setHoraReabertura(hr);
+                    s.setOrdem(ordemSusp++);
+                    suspensaoRepo.save(s);
+                }
+            }
+            entityManager.createNativeQuery(
+                "UPDATE OPR_REGISTRO_ENTRADA SET SUSPENSOES_EDITADO = 1 WHERE ID = :id")
+                .setParameter("id", entradaId).executeUpdate();
+        }
+
+        // Atualizar operadores da sessão se multi-operador
+        if (isMultiOp && body.containsKey("operadores_sessao_ids")) {
+            @SuppressWarnings("unchecked")
+            List<String> opIds = body.get("operadores_sessao_ids") instanceof List
+                    ? (List<String>) body.get("operadores_sessao_ids") : List.of();
+            entradaOperadorRepo.deleteByEntradaId(entradaId);
+            for (String opId : opIds) {
+                EntradaOperador eo = new EntradaOperador();
+                eo.setEntradaId(entradaId);
+                eo.setOperadorId(opId);
+                entradaOperadorRepo.save(eo);
+            }
         }
 
         boolean houveAnormalidadeAnterior = Boolean.TRUE.equals(snapshot.get("houve_anormalidade"));
