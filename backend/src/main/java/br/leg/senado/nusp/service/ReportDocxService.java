@@ -76,7 +76,14 @@ public class ReportDocxService {
 
     @SuppressWarnings("unchecked")
     public byte[] gerarRelatorioOperacoesSessoes(List<Map<String, Object>> sessoes) {
-        XWPFDocument doc = initDoc("Registros de Operação (Sessões)");
+        XWPFDocument doc = initDoc(null);
+        // Título customizado: centralizado, negrito, tamanho 18
+        XWPFParagraph titleP = doc.createParagraph();
+        titleP.setAlignment(ParagraphAlignment.CENTER);
+        XWPFRun titleRun = titleP.createRun();
+        titleRun.setText("Registros de Operação (Sessões)");
+        titleRun.setBold(true);
+        titleRun.setFontSize(18);
         if (sessoes.isEmpty()) {
             doc.createParagraph().createRun().setText("Nenhum registro encontrado para os filtros aplicados.");
             return finalize(doc, 0);
@@ -86,50 +93,123 @@ public class ReportDocxService {
             Map<String, Object> s = sessoes.get(idx);
             String vTxt = nonEmpty(s, "verificacao", "--");
             String vColor = "realizado".equalsIgnoreCase(vTxt.trim()) ? COLOR_GREEN : COLOR_MUTED;
-            String eTxt = nonEmpty(s, "em_aberto", "--");
-            String eColor = "sim".equalsIgnoreCase(eTxt.trim()) ? COLOR_BLUE : COLOR_DARK;
+            String evtDisplay = nonEmpty(s, "evento_display", "--");
+            if (evtDisplay.length() > 30) evtDisplay = evtDisplay.substring(0, 30) + "...";
 
-            XWPFTable tm = addTable(doc, 2, 5, COLS_OPERACOES_SESSOES_MASTER);
-            renderHeader(tm, new String[]{"Local", "Data", "1º Registro por", "Checklist?", "Em Aberto?"}, HEADER_FILL);
+            XWPFTable tm = addTable(doc, 2, 7, COLS_OPERACOES_SESSOES_MASTER);
+            renderHeader(tm, new String[]{"Local", "Data", "Evento", "Pauta", "Início", "Fim", "Verificação"}, HEADER_FILL);
             setShading(tm.getRow(1), DATA_ROW_FILL);
-            setText(tm, 1, 0, str(s, "sala"), true, null, ParagraphAlignment.LEFT, 9);
-            setText(tm, 1, 1, fmtDate(s.get("data")), true, null, ParagraphAlignment.LEFT, 9);
-            setText(tm, 1, 2, str(s, "autor"), true, null, ParagraphAlignment.LEFT, 9);
-            setText(tm, 1, 3, vTxt, true, vColor, ParagraphAlignment.LEFT, 9);
-            setText(tm, 1, 4, eTxt, true, eColor, ParagraphAlignment.LEFT, 9);
+            setText(tm, 1, 0, str(s, "sala"), false, null, ParagraphAlignment.LEFT, 9);
+            setText(tm, 1, 1, fmtDate(s.get("data")), false, null, ParagraphAlignment.LEFT, 9);
+            setText(tm, 1, 2, evtDisplay, false, null, ParagraphAlignment.LEFT, 9);
+            setText(tm, 1, 3, fmtTime(s.get("ultimo_pauta")), false, null, ParagraphAlignment.CENTER, 9);
+            setText(tm, 1, 4, fmtTime(s.get("ultimo_inicio")), false, null, ParagraphAlignment.CENTER, 9);
+            setText(tm, 1, 5, fmtTime(s.get("ultimo_termino")), false, null, ParagraphAlignment.CENTER, 9);
+            setText(tm, 1, 6, vTxt, true, vColor, ParagraphAlignment.LEFT, 9);
 
-            doc.createParagraph();
+            // Parágrafo zero-height entre tabelas para que fiquem coladas
+            XWPFParagraph spacer1 = doc.createParagraph();
+            spacer1.setSpacingBefore(0);
+            spacer1.setSpacingAfter(0);
+            CTPPr ppr1 = spacer1.getCTP().isSetPPr() ? spacer1.getCTP().getPPr() : spacer1.getCTP().addNewPPr();
+            CTSpacing sp1 = ppr1.isSetSpacing() ? ppr1.getSpacing() : ppr1.addNewSpacing();
+            sp1.setBefore(BigInteger.ZERO); sp1.setAfter(BigInteger.ZERO); sp1.setLine(BigInteger.valueOf(1));
+            spacer1.createRun().setFontSize(1);
+
             XWPFTable bar = addTable(doc, 1, 1, new int[]{100});
             setCellShading(bar.getRow(0).getCell(0), DETAIL_BAR_FILL);
             setText(bar, 0, 0, "Entradas da Operação:", true, null, ParagraphAlignment.LEFT, 9);
 
+            // Parágrafo zero-height entre bar e subtabela
+            XWPFParagraph spacer2 = doc.createParagraph();
+            spacer2.setSpacingBefore(0); spacer2.setSpacingAfter(0);
+            CTPPr ppr2 = spacer2.getCTP().isSetPPr() ? spacer2.getCTP().getPPr() : spacer2.getCTP().addNewPPr();
+            CTSpacing sp2 = ppr2.isSetSpacing() ? ppr2.getSpacing() : ppr2.addNewSpacing();
+            sp2.setBefore(BigInteger.ZERO); sp2.setAfter(BigInteger.ZERO); sp2.setLine(BigInteger.valueOf(1));
+            spacer2.createRun().setFontSize(1);
+
             List<Map<String, Object>> entradas = (List<Map<String, Object>>) s.get("entradas");
             int entCount = (entradas != null && !entradas.isEmpty()) ? entradas.size() : 1;
-            XWPFTable te = addTable(doc, 1 + entCount, 8, COLS_OPERACOES_SESSOES_ENTRADAS);
-            renderHeader(te, new String[]{"Nº", "Operador", "Tipo", "Evento", "Pauta", "Início", "Fim", "Anormalidade?"}, HEADER_DETAIL_FILL);
+            boolean isPlenPrincipal = Boolean.TRUE.equals(s.get("is_plenario_principal"));
 
-            if (entradas != null && !entradas.isEmpty()) {
-                for (int ei = 0; ei < entradas.size(); ei++) {
-                    int ri = ei + 1;
-                    Map<String, Object> ent = entradas.get(ei);
-                    Object ordem = ent.get("ordem");
-                    String oTxt = (ordem != null && !"".equals(ordem.toString())) ? ordem + "º" : "--";
-                    boolean anom = bool(ent, "anormalidade");
-
-                    setText(te, ri, 0, oTxt, false, null, ParagraphAlignment.CENTER, 8);
-                    setText(te, ri, 1, str(ent, "operador"), false, null, ParagraphAlignment.LEFT, 8);
-                    setText(te, ri, 2, str(ent, "tipo"), false, null, ParagraphAlignment.LEFT, 8);
-                    setText(te, ri, 3, str(ent, "evento"), false, null, ParagraphAlignment.LEFT, 8);
-                    setText(te, ri, 4, fmtTime(ent.get("pauta")), false, null, ParagraphAlignment.CENTER, 8);
-                    setText(te, ri, 5, fmtTime(ent.get("inicio")), false, null, ParagraphAlignment.CENTER, 8);
-                    setText(te, ri, 6, fmtTime(ent.get("fim")), false, null, ParagraphAlignment.CENTER, 8);
-                    setText(te, ri, 7, anom ? "SIM" : "Não", true, anom ? COLOR_RED : COLOR_GREEN, ParagraphAlignment.CENTER, 8);
+            if (isPlenPrincipal) {
+                // Contar total de linhas de operadores
+                int totalOpRows = 0;
+                if (entradas != null && !entradas.isEmpty()) {
+                    for (Map<String, Object> ent : entradas) {
+                        List<String> ops = (List<String>) ent.get("operadores");
+                        totalOpRows += (ops != null && !ops.isEmpty()) ? ops.size() : 1;
+                    }
+                } else {
+                    totalOpRows = 1;
+                }
+                XWPFTable te = addTable(doc, 1 + totalOpRows, 2, new int[]{300, 60});
+                renderHeader(te, new String[]{"Operador", "Anom?"}, HEADER_DETAIL_FILL);
+                if (entradas != null && !entradas.isEmpty()) {
+                    int ri = 1;
+                    for (Map<String, Object> ent : entradas) {
+                        boolean anom = bool(ent, "anormalidade");
+                        List<String> ops = (List<String>) ent.get("operadores");
+                        if (ops != null && !ops.isEmpty()) {
+                            for (int oi = 0; oi < ops.size(); oi++) {
+                                setText(te, ri + oi, 0, ops.get(oi), false, null, ParagraphAlignment.LEFT, 8);
+                                if (oi == 0) {
+                                    setText(te, ri, 1, anom ? "SIM" : "Não", true, anom ? COLOR_RED : COLOR_GREEN, ParagraphAlignment.CENTER, 8);
+                                    if (ops.size() > 1) {
+                                        // Vertical merge: restart na primeira, continue nas seguintes
+                                        te.getRow(ri).getCell(1).getCTTc().addNewTcPr().addNewVMerge().setVal(STMerge.RESTART);
+                                        for (int mi = 1; mi < ops.size(); mi++) {
+                                            te.getRow(ri + mi).getCell(1).getCTTc().addNewTcPr().addNewVMerge().setVal(STMerge.CONTINUE);
+                                        }
+                                    }
+                                }
+                            }
+                            ri += ops.size();
+                        } else {
+                            setText(te, ri, 0, str(ent, "preenchido_por"), false, null, ParagraphAlignment.LEFT, 8);
+                            setText(te, ri, 1, anom ? "SIM" : "Não", true, anom ? COLOR_RED : COLOR_GREEN, ParagraphAlignment.CENTER, 8);
+                            ri++;
+                        }
+                    }
+                } else {
+                    setText(te, 1, 0, "Nenhuma entrada registrada nesta sessão.", false, null, ParagraphAlignment.LEFT, 8);
                 }
             } else {
-                setText(te, 1, 0, "Nenhuma entrada registrada nesta sessão.", false, null, ParagraphAlignment.LEFT, 8);
+                XWPFTable te = addTable(doc, 1 + entCount, 6, COLS_OPERACOES_SESSOES_ENT_NORMAL);
+                renderHeader(te, new String[]{"Nº", "Operador", "Início Op.", "Fim Op.", "Observações", "Anom?"}, HEADER_DETAIL_FILL);
+                if (entradas != null && !entradas.isEmpty()) {
+                    for (int ei = 0; ei < entradas.size(); ei++) {
+                        int ri = ei + 1;
+                        Map<String, Object> ent = entradas.get(ei);
+                        Object ordem = ent.get("ordem");
+                        String oTxt = (ordem != null && !"".equals(ordem.toString())) ? ordem + "º" : "--";
+                        boolean anom = bool(ent, "anormalidade");
+                        String obs = str(ent, "observacoes");
+                        if (obs.length() > 20) obs = obs.substring(0, 20) + "...";
+
+                        setText(te, ri, 0, oTxt, false, null, ParagraphAlignment.CENTER, 8);
+                        setText(te, ri, 1, str(ent, "operador"), false, null, ParagraphAlignment.LEFT, 8);
+                        setText(te, ri, 2, fmtTime(ent.get("hora_entrada")), false, null, ParagraphAlignment.CENTER, 8);
+                        setText(te, ri, 3, fmtTime(ent.get("hora_saida")), false, null, ParagraphAlignment.CENTER, 8);
+                        setText(te, ri, 4, obs, false, null, ParagraphAlignment.LEFT, 8);
+                        setText(te, ri, 5, anom ? "SIM" : "Não", true, anom ? COLOR_RED : COLOR_GREEN, ParagraphAlignment.CENTER, 8);
+                    }
+                } else {
+                    setText(te, 1, 0, "Nenhuma entrada registrada nesta sessão.", false, null, ParagraphAlignment.LEFT, 8);
+                }
             }
 
-            if (idx < sessoes.size() - 1) { doc.createParagraph(); doc.createParagraph(); }
+            if (idx < sessoes.size() - 1) {
+                // Linha divisória com espaçamento mínimo (~10px = 15 twips each)
+                XWPFParagraph sep = doc.createParagraph();
+                sep.setSpacingBefore(15); sep.setSpacingAfter(15);
+                CTPPr sepPpr = sep.getCTP().isSetPPr() ? sep.getCTP().getPPr() : sep.getCTP().addNewPPr();
+                CTSpacing sepSp = sepPpr.isSetSpacing() ? sepPpr.getSpacing() : sepPpr.addNewSpacing();
+                sepSp.setBefore(BigInteger.valueOf(15)); sepSp.setAfter(BigInteger.valueOf(15));
+                sepSp.setLine(BigInteger.valueOf(1)); sepSp.setLineRule(STLineSpacingRule.EXACT);
+                sep.setBorderBottom(Borders.SINGLE);
+                sep.createRun().setFontSize(1);
+            }
         }
 
         return finalize(doc, sessoes.size());
@@ -231,9 +311,11 @@ public class ReportDocxService {
             clearBody(doc);
             addPageNumberFooter(doc);
 
-            XWPFParagraph heading = doc.createParagraph();
-            heading.setStyle("Heading2");
-            heading.createRun().setText(title);
+            if (title != null) {
+                XWPFParagraph heading = doc.createParagraph();
+                heading.setStyle("Heading2");
+                heading.createRun().setText(title);
+            }
 
             return doc;
         } catch (Exception e) {

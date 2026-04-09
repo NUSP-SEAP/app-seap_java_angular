@@ -235,31 +235,32 @@ public class ReportPdfService {
         }
 
         float[] mColW = scaleWeights(COLS_OPERACOES_SESSOES_MASTER, PAGE_WIDTH);
-        float[] eColW = scaleWeights(COLS_OPERACOES_SESSOES_ENTRADAS, PAGE_WIDTH);
 
         for (int idx = 0; idx < sessoes.size(); idx++) {
             Map<String, Object> s = sessoes.get(idx);
 
             String vTxt = nonEmpty(s, "verificacao", "--");
             Color vColor = "realizado".equalsIgnoreCase(vTxt.trim()) ? hex(COLOR_GREEN) : hex(COLOR_MUTED);
-            String eTxt = nonEmpty(s, "em_aberto", "--");
-            Color eColor = "sim".equalsIgnoreCase(eTxt.trim()) ? hex(COLOR_BLUE) : hex(COLOR_DARK);
+            String evtDisplay = nonEmpty(s, "evento_display", "--");
+            if (evtDisplay.length() > 30) evtDisplay = evtDisplay.substring(0, 30) + "...";
 
             // Header
             PdfPTable hdr = new PdfPTable(mColW);
             hdr.setWidthPercentage(100);
-            for (String h : new String[]{"Local", "Data", "1º Registro por", "Checklist?", "Em Aberto?"}) {
+            for (String h : new String[]{"Local", "Data", "Evento", "Pauta", "Início", "Fim", "Verificação"}) {
                 hdr.addCell(headerCell(h, hdrFont));
             }
 
             // Master
             PdfPTable master = new PdfPTable(mColW);
             master.setWidthPercentage(100);
-            master.addCell(dataCell(str(s, "sala"), nf, true));
-            master.addCell(dataCell(fmtDate(s.get("data")), nf, true));
-            master.addCell(dataCell(str(s, "autor"), nf, true));
+            master.addCell(dataCell(str(s, "sala"), nf, false));
+            master.addCell(dataCell(fmtDate(s.get("data")), nf, false));
+            master.addCell(dataCell(evtDisplay, nf, false));
+            master.addCell(dataCell(fmtTime(s.get("ultimo_pauta")), nf, false));
+            master.addCell(dataCell(fmtTime(s.get("ultimo_inicio")), nf, false));
+            master.addCell(dataCell(fmtTime(s.get("ultimo_termino")), nf, false));
             master.addCell(dataCell(vTxt, pdfFont(9f, Font.BOLD, vColor), false));
-            master.addCell(dataCell(eTxt, pdfFont(9f, Font.BOLD, eColor), false));
 
             // Detail bar
             PdfPTable bar = new PdfPTable(1);
@@ -270,49 +271,100 @@ public class ReportPdfService {
             barC.setBorderColor(hex(GRID_COLOR));
             bar.addCell(barC);
 
-            // Entradas
-            PdfPTable eTbl = new PdfPTable(eColW);
-            eTbl.setWidthPercentage(100);
-            for (String h : new String[]{"Nº", "Operador", "Tipo", "Evento", "Pauta", "Início", "Fim", "Anormalidade?"}) {
-                PdfPCell hc = new PdfPCell(new Phrase(h, smHdr));
-                hc.setBackgroundColor(hex(HEADER_DETAIL_FILL));
-                hc.setBorderColor(hex(GRID_COLOR));
-                hc.setPadding(4f);
-                eTbl.addCell(hc);
-            }
-
             List<Map<String, Object>> entradas = (List<Map<String, Object>>) s.get("entradas");
-            if (entradas != null && !entradas.isEmpty()) {
-                for (Map<String, Object> ent : entradas) {
-                    Object ordem = ent.get("ordem");
-                    String oTxt = (ordem != null && !"".equals(ordem.toString())) ? ordem + "º" : "--";
-                    boolean anom = bool(ent, "anormalidade");
-                    String aTxt = anom ? "SIM" : "Não";
-                    Color aC = anom ? hex(COLOR_RED) : hex(COLOR_GREEN);
+            boolean isPlenPrincipal = Boolean.TRUE.equals(s.get("is_plenario_principal"));
 
-                    eTbl.addCell(centerItemCell(oTxt, sm));
-                    eTbl.addCell(itemCell(str(ent, "operador"), sm));
-                    eTbl.addCell(itemCell(str(ent, "tipo"), sm));
-                    eTbl.addCell(itemCell(str(ent, "evento"), sm));
-                    eTbl.addCell(centerItemCell(fmtTime(ent.get("pauta")), sm));
-                    eTbl.addCell(centerItemCell(fmtTime(ent.get("inicio")), sm));
-                    eTbl.addCell(centerItemCell(fmtTime(ent.get("fim")), sm));
-                    PdfPCell ac = itemCell(aTxt, pdfFont(8f, Font.BOLD, aC));
-                    ac.setHorizontalAlignment(Element.ALIGN_CENTER);
-                    eTbl.addCell(ac);
+            if (isPlenPrincipal) {
+                // Plenário Principal: Operador | Anom? (com rowspan)
+                float[] eColW = scaleWeights(new int[]{300, 60}, PAGE_WIDTH);
+                PdfPTable eTbl = new PdfPTable(eColW);
+                eTbl.setWidthPercentage(100);
+                for (String h : new String[]{"Operador", "Anom?"}) {
+                    PdfPCell hc = new PdfPCell(new Phrase(h, smHdr));
+                    hc.setBackgroundColor(hex(HEADER_DETAIL_FILL));
+                    hc.setBorderColor(hex(GRID_COLOR));
+                    hc.setPadding(4f);
+                    eTbl.addCell(hc);
                 }
+                if (entradas != null && !entradas.isEmpty()) {
+                    for (Map<String, Object> ent : entradas) {
+                        boolean anom = bool(ent, "anormalidade");
+                        List<String> operadores = (List<String>) ent.get("operadores");
+                        if (operadores != null && !operadores.isEmpty()) {
+                            for (int oi = 0; oi < operadores.size(); oi++) {
+                                eTbl.addCell(itemCell(operadores.get(oi), sm));
+                                if (oi == 0) {
+                                    PdfPCell ac = itemCell(anom ? "SIM" : "Não", pdfFont(8f, Font.BOLD, anom ? hex(COLOR_RED) : hex(COLOR_GREEN)));
+                                    ac.setHorizontalAlignment(Element.ALIGN_CENTER);
+                                    ac.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                                    ac.setRowspan(operadores.size());
+                                    eTbl.addCell(ac);
+                                }
+                            }
+                        } else {
+                            eTbl.addCell(itemCell(str(ent, "preenchido_por"), sm));
+                            PdfPCell ac = itemCell(anom ? "SIM" : "Não", pdfFont(8f, Font.BOLD, anom ? hex(COLOR_RED) : hex(COLOR_GREEN)));
+                            ac.setHorizontalAlignment(Element.ALIGN_CENTER);
+                            eTbl.addCell(ac);
+                        }
+                    }
+                } else {
+                    PdfPCell empty = itemCell("Nenhuma entrada registrada nesta sessão.", sm);
+                    empty.setColspan(2);
+                    eTbl.addCell(empty);
+                }
+                doc.add(hdr); doc.add(master); doc.add(bar); doc.add(eTbl);
             } else {
-                PdfPCell empty = itemCell("Nenhuma entrada registrada nesta sessão.", sm);
-                empty.setColspan(8);
-                eTbl.addCell(empty);
+                // Plenários numerados: Nº | Operador | Início Op. | Fim Op. | Observações | Anom?
+                float[] eColW = scaleWeights(COLS_OPERACOES_SESSOES_ENT_NORMAL, PAGE_WIDTH);
+                PdfPTable eTbl = new PdfPTable(eColW);
+                eTbl.setWidthPercentage(100);
+                for (String h : new String[]{"Nº", "Operador", "Início Op.", "Fim Op.", "Observações", "Anom?"}) {
+                    PdfPCell hc = new PdfPCell(new Phrase(h, smHdr));
+                    hc.setBackgroundColor(hex(HEADER_DETAIL_FILL));
+                    hc.setBorderColor(hex(GRID_COLOR));
+                    hc.setPadding(4f);
+                    eTbl.addCell(hc);
+                }
+                if (entradas != null && !entradas.isEmpty()) {
+                    for (Map<String, Object> ent : entradas) {
+                        Object ordem = ent.get("ordem");
+                        String oTxt = (ordem != null && !"".equals(ordem.toString())) ? ordem + "º" : "--";
+                        boolean anom = bool(ent, "anormalidade");
+                        String obs = str(ent, "observacoes");
+                        if (obs.length() > 20) obs = obs.substring(0, 20) + "...";
+
+                        eTbl.addCell(centerItemCell(oTxt, sm));
+                        eTbl.addCell(itemCell(str(ent, "operador"), sm));
+                        eTbl.addCell(centerItemCell(fmtTime(ent.get("hora_entrada")), sm));
+                        eTbl.addCell(centerItemCell(fmtTime(ent.get("hora_saida")), sm));
+                        eTbl.addCell(itemCell(obs, sm));
+                        PdfPCell ac = itemCell(anom ? "SIM" : "Não", pdfFont(8f, Font.BOLD, anom ? hex(COLOR_RED) : hex(COLOR_GREEN)));
+                        ac.setHorizontalAlignment(Element.ALIGN_CENTER);
+                        eTbl.addCell(ac);
+                    }
+                } else {
+                    PdfPCell empty = itemCell("Nenhuma entrada registrada nesta sessão.", sm);
+                    empty.setColspan(6);
+                    eTbl.addCell(empty);
+                }
+                doc.add(hdr); doc.add(master); doc.add(bar); doc.add(eTbl);
             }
 
-            doc.add(hdr);
-            doc.add(master);
-            doc.add(bar);
-            doc.add(eTbl);
-
-            if (idx < sessoes.size() - 1) doc.add(new Paragraph(" "));
+            if (idx < sessoes.size() - 1) {
+                // Linha divisória entre registros
+                PdfPTable divider = new PdfPTable(1);
+                divider.setWidthPercentage(100);
+                divider.setSpacingBefore(6f);
+                divider.setSpacingAfter(6f);
+                PdfPCell divCell = new PdfPCell();
+                divCell.setBorder(com.lowagie.text.Rectangle.BOTTOM);
+                divCell.setBorderColorBottom(hex(COLOR_SLATE));
+                divCell.setBorderWidthBottom(2f);
+                divCell.setFixedHeight(1f);
+                divider.addCell(divCell);
+                doc.add(divider);
+            }
         }
 
         addTotalRow(doc, sessoes.size(), nf);

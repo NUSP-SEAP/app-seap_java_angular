@@ -78,10 +78,10 @@ public class RdsXlsxService {
                     setCellValue(ws, row, 1, "SGM");                            // B
                     setCellValue(ws, row, 2, objStr(line, "atividade_legislativa")); // C
                     setCellValue(ws, row, 3, objStr(line, "nome_evento"));       // D
-                    setCellValue(ws, row, 4, objStr(line, "horario_pauta"));     // E
-                    setCellValue(ws, row, 5, null);                              // F
-                    setCellValue(ws, row, 6, objStr(line, "horario_inicio"));    // G
-                    setCellValue(ws, row, 7, objStr(line, "horario_termino"));   // H
+                    setCellValue(ws, row, 4, trimSeconds(objStr(line, "horario_pauta")));     // E
+                    setCellValue(ws, row, 5, null);                                            // F
+                    setCellValue(ws, row, 6, trimSeconds(objStr(line, "horario_inicio")));      // G
+                    setCellValue(ws, row, 7, trimSeconds(objStr(line, "horario_termino")));     // H
                     setCellValue(ws, row, 8, objStr(line, "op1"));               // I
                     setCellValue(ws, row, 9, objStr(line, "op2"));               // J
                     setCellValue(ws, row, 10, objStr(line, "op3"));              // K
@@ -178,19 +178,32 @@ public class RdsXlsxService {
                     atividade = comissaoNome.trim();
                 }
 
+                String salaNome = objStr(sess, "sala_nome");
+                if (atividade == null && "Plenário Principal".equals(salaNome)) {
+                    atividade = "Sessão Plenária";
+                }
+
                 Map<String, Object> line = new LinkedHashMap<>();
                 line.put("registro_id", sess.get("registro_id"));
                 line.put("group_index", g);
                 line.put("data", sess.get("data"));
-                line.put("sala_nome", sess.get("sala_nome"));
+                line.put("sala_nome", salaNome);
                 line.put("atividade_legislativa", atividade);
                 line.put("nome_evento", chooseValue(groupEntries, "nome_evento"));
                 line.put("horario_pauta", chooseValue(groupEntries, "horario_pauta"));
                 line.put("horario_inicio", chooseValue(groupEntries, "horario_inicio"));
                 line.put("horario_termino", fimOut);
-                line.put("op1", objStr(byOrdem.getOrDefault(start, Map.of()), "operador_nome_exibicao"));
-                line.put("op2", objStr(byOrdem.getOrDefault(start + 1, Map.of()), "operador_nome_exibicao"));
-                line.put("op3", objStr(byOrdem.getOrDefault(start + 2, Map.of()), "operador_nome_exibicao"));
+                // Plenário Principal: usar nomes da junction table (multi_op_names)
+                List<String> multiOps = getMultiOpNames(byOrdem, start);
+                if (multiOps != null) {
+                    line.put("op1", multiOps.size() > 0 ? multiOps.get(0) : null);
+                    line.put("op2", multiOps.size() > 1 ? multiOps.get(1) : null);
+                    line.put("op3", multiOps.size() > 2 ? multiOps.get(2) : null);
+                } else {
+                    line.put("op1", objStr(byOrdem.getOrDefault(start, Map.of()), "operador_nome_exibicao"));
+                    line.put("op2", objStr(byOrdem.getOrDefault(start + 1, Map.of()), "operador_nome_exibicao"));
+                    line.put("op3", objStr(byOrdem.getOrDefault(start + 2, Map.of()), "operador_nome_exibicao"));
+                }
                 line.put("obs", obs);
 
                 Object dataObj = sess.get("data");
@@ -210,6 +223,21 @@ public class RdsXlsxService {
         }
 
         return linesByDay;
+    }
+
+    /**
+     * Para Plenário Principal: retorna os nomes dos operadores da junction table.
+     * Retorna null se não houver multi_op_names (plenários normais).
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> getMultiOpNames(Map<Integer, Map<String, Object>> byOrdem, int start) {
+        Map<String, Object> entry = byOrdem.get(start);
+        if (entry == null) return null;
+        Object multiOps = entry.get("multi_op_names");
+        if (multiOps instanceof List<?> list && !list.isEmpty()) {
+            return (List<String>) list;
+        }
+        return null;
     }
 
     // ══ choose_value — regra de divergência ═════════════════════
@@ -283,6 +311,9 @@ public class RdsXlsxService {
         if (row == null) row = ws.createRow(rowIdx);
         Cell cell = row.getCell(colIdx);
         if (cell == null) cell = row.createCell(colIdx);
+        if (cell.getCellType() == CellType.FORMULA) {
+            cell.removeFormula();
+        }
         if (value == null || value.isEmpty()) {
             cell.setBlank();
         } else {
@@ -324,6 +355,12 @@ public class RdsXlsxService {
         if (dataObj instanceof java.sql.Date sd) return sd.toLocalDate().getDayOfMonth();
         if (dataObj instanceof java.util.Date ud) { var c = Calendar.getInstance(); c.setTime(ud); return c.get(Calendar.DAY_OF_MONTH); }
         return 1;
+    }
+
+    /** "HH:MM:SS" → "HH:MM" */
+    private String trimSeconds(String time) {
+        if (time == null) return null;
+        return time.length() >= 5 ? time.substring(0, 5) : time;
     }
 
     private String strForSort(Map<String, Object> m, String key) {

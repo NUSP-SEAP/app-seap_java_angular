@@ -31,8 +31,9 @@ public final class ReportConfig {
     public static final int[] COLS_OPERADORES                = {60, 40};
     public static final int[] COLS_CHECKLISTS_MASTER         = {70, 60, 150, 45, 50, 60, 50};
     public static final int[] COLS_ANORMALIDADES             = {70, 60, 110, 170, 70, 60, 70};
-    public static final int[] COLS_OPERACOES_SESSOES_MASTER  = {90, 60, 200, 80, 80};
-    public static final int[] COLS_OPERACOES_SESSOES_ENTRADAS = {35, 115, 65, 165, 45, 45, 45, 55};
+    public static final int[] COLS_OPERACOES_SESSOES_MASTER  = {90, 60, 130, 45, 45, 45, 70};
+    public static final int[] COLS_OPERACOES_SESSOES_ENT_NORMAL = {30, 120, 50, 50, 120, 50};
+    public static final int[] COLS_OPERACOES_SESSOES_ENT_PLENARIO = {200, 200, 50};
     public static final int[] COLS_OPERACOES_ENTRADAS        = {80, 60, 110, 70, 170, 45, 45, 45, 70};
     public static final int[] COLS_MEUS_CHECKLISTS           = {180, 80, 100, 100};
     public static final int[] COLS_MINHAS_OPERACOES          = {150, 70, 90, 90, 80};
@@ -61,7 +62,12 @@ public final class ReportConfig {
         if (v instanceof java.time.LocalDate ld) return String.format("%02d/%02d/%04d", ld.getDayOfMonth(), ld.getMonthValue(), ld.getYear());
         if (v instanceof java.time.LocalDateTime ldt) return String.format("%02d/%02d/%04d", ldt.getDayOfMonth(), ldt.getMonthValue(), ldt.getYear());
         if (v instanceof java.util.Date d) { var c = java.util.Calendar.getInstance(); c.setTime(d); return String.format("%02d/%02d/%04d", c.get(java.util.Calendar.DAY_OF_MONTH), c.get(java.util.Calendar.MONTH)+1, c.get(java.util.Calendar.YEAR)); }
-        return v.toString();
+        // String "yyyy-MM-dd..." → dd/MM/yyyy
+        String s = v.toString().trim();
+        if (s.length() >= 10 && s.charAt(4) == '-' && s.charAt(7) == '-') {
+            return s.substring(8, 10) + "/" + s.substring(5, 7) + "/" + s.substring(0, 4);
+        }
+        return s;
     }
 
     /** Formata hora para HH:MM. Aceita LocalTime, String "HH:MM:SS", null. */
