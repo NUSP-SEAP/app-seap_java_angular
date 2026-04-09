@@ -5,6 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { LookupService } from '../../core/services/lookup.service';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
+import { MultiSelectDropdownComponent, MultiSelectOption } from '../../shared/components/multi-select-dropdown.component';
 
 interface ChecklistItem { id: number; nome: string; tipo_widget: string; ordem?: number; }
 interface Resposta { item_tipo_id: number; status: string | null; descricao_falha: string | null; valor_texto: string | null; }
@@ -16,7 +17,7 @@ interface EditItem {
 @Component({
   selector: 'app-checklist-wizard',
   standalone: true,
-  imports: [FormsModule, RouterLink, FmtDatePipe],
+  imports: [FormsModule, RouterLink, FmtDatePipe, MultiSelectDropdownComponent],
   template: `
     <div class="card-custom" style="max-width:700px; margin:0 auto">
 
@@ -44,7 +45,7 @@ interface EditItem {
             </div>
             <div class="form-row">
               <label>Local</label>
-              @if (readOnly()) {
+              @if (readOnly() || editIsMultiOperador) {
                 <div class="field-value">{{ getSalaNome() }}</div>
               } @else {
                 <select [(ngModel)]="salaId" style="width:100%">
@@ -55,6 +56,40 @@ interface EditItem {
               }
             </div>
           </div>
+
+          <!-- 1b) Operadores (Plenário Principal) -->
+          @if (editIsMultiOperador) {
+            @if (readOnly()) {
+              <div class="form-row" style="margin-bottom:10px">
+                <label style="font-weight:600; margin-bottom:4px">Cabine</label>
+                <input type="text" class="field-ro" [value]="editCabineNomes.join(', ') || '—'" readonly>
+              </div>
+              <div class="form-row" style="margin-bottom:10px">
+                <label style="font-weight:600; margin-bottom:4px">Plenário</label>
+                <input type="text" class="field-ro" [value]="editPlenarioNomes.join(', ') || '—'" readonly>
+              </div>
+            } @else {
+              <div class="form-row" style="margin-bottom:14px">
+                <label style="font-weight:600; margin-bottom:8px">Cabine</label>
+                <app-multi-select-dropdown
+                  [options]="operadorOptions()"
+                  [selected]="selectedCabine"
+                  placeholder="Selecione operadores..."
+                  (selectionChange)="selectedCabine = $event" />
+              </div>
+              <div class="form-row" style="margin-bottom:14px">
+                <label style="font-weight:600; margin-bottom:8px">Plenário</label>
+                <app-multi-select-dropdown
+                  [options]="operadorOptions()"
+                  [selected]="selectedPlenario"
+                  placeholder="Selecione operadores..."
+                  (selectionChange)="selectedPlenario = $event" />
+              </div>
+              @if (!readOnly() && !usuarioNosOperadores()) {
+                <p style="color:var(--color-red); font-size:.85rem; margin-top:6px">Você deve estar em pelo menos um dos grupos (Cabine ou Plenário).</p>
+              }
+            }
+          }
 
           <!-- 2) Itens -->
           <h3 style="margin:20px 0 10px; font-size:.95rem">Itens Verificados</h3>
@@ -122,12 +157,14 @@ interface EditItem {
           <!-- Ações -->
           <div style="display:flex; justify-content:space-between; margin-top:24px">
             <button class="btn-secondary-custom" (click)="fechar()">Fechar Aba</button>
-            @if (readOnly()) {
-              <button class="btn-primary-custom" (click)="enterEditMode()">Editar</button>
-            } @else {
-              <button class="btn-primary-custom" [disabled]="saving() || !canSaveEdit()" (click)="submitEdit()">
-                {{ saving() ? 'Salvando...' : 'Salvar Alterações' }}
-              </button>
+            @if (canEditChecklist()) {
+              @if (readOnly()) {
+                <button class="btn-primary-custom" (click)="enterEditMode()">Editar</button>
+              } @else {
+                <button class="btn-primary-custom" [disabled]="saving() || !canSaveEdit()" (click)="submitEdit()">
+                  {{ saving() ? 'Salvando...' : 'Salvar Alterações' }}
+                </button>
+              }
             }
           </div>
         }
@@ -163,31 +200,26 @@ interface EditItem {
           <p class="text-muted-sm">Selecione os operadores da verificação.</p>
           <div class="form-row" style="margin-bottom:14px">
             <label style="font-weight:600; margin-bottom:8px">Cabine</label>
-            <div class="checkbox-list">
-              @for (op of lookup.operadoresPlenario(); track op.id) {
-                <label class="checkbox-item">
-                  <input type="checkbox" [checked]="selectedCabine.includes(op.id + '')"
-                    (change)="toggleOperador('cabine', op.id + '', $event)">
-                  {{ op.nome_completo }}
-                </label>
-              }
-            </div>
+            <app-multi-select-dropdown
+              [options]="operadorOptions()"
+              [selected]="selectedCabine"
+              placeholder="Selecione operadores..."
+              (selectionChange)="selectedCabine = $event" />
           </div>
           <div class="form-row" style="margin-bottom:14px">
             <label style="font-weight:600; margin-bottom:8px">Plenário</label>
-            <div class="checkbox-list">
-              @for (op of lookup.operadoresPlenario(); track op.id) {
-                <label class="checkbox-item">
-                  <input type="checkbox" [checked]="selectedPlenario.includes(op.id + '')"
-                    (change)="toggleOperador('plenario', op.id + '', $event)">
-                  {{ op.nome_completo }}
-                </label>
-              }
-            </div>
+            <app-multi-select-dropdown
+              [options]="operadorOptions()"
+              [selected]="selectedPlenario"
+              placeholder="Selecione operadores..."
+              (selectionChange)="selectedPlenario = $event" />
           </div>
+          @if (!usuarioNosOperadores()) {
+            <p style="color:var(--color-red); font-size:.85rem; margin-bottom:12px">Você deve estar em pelo menos um dos grupos (Cabine ou Plenário).</p>
+          }
           <div style="display:flex; justify-content:space-between">
             <button class="btn-secondary-custom" (click)="step.set('setup')">&larr; Voltar</button>
-            <button class="btn-primary-custom" [disabled]="selectedCabine.length === 0 && selectedPlenario.length === 0" (click)="startWizard()">Avançar &rarr;</button>
+            <button class="btn-primary-custom" [disabled]="!usuarioNosOperadores() || (selectedCabine.length === 0 && selectedPlenario.length === 0)" (click)="startWizard()">Avançar &rarr;</button>
           </div>
         }
 
@@ -303,6 +335,7 @@ interface EditItem {
       &:hover { background: #f8fafc; }
       input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
     }
+    .field-ro { background: #f9fafb !important; color: #6b7280; cursor: not-allowed; width: 100%; }
     .edit-radios { display: flex; gap: 8px; margin-top: 6px; }
     .radio-card-sm {
       display: flex; align-items: center; gap: 4px;
@@ -352,6 +385,21 @@ export class ChecklistWizardComponent implements OnInit {
   selectedCabine: string[] = [];
   selectedPlenario: string[] = [];
 
+  // ── Multi-operador no modo edição ──
+  editIsMultiOperador = false;
+  editCabineNomes: string[] = [];
+  editPlenarioNomes: string[] = [];
+
+  usuarioNosOperadores(): boolean {
+    const uid = this.auth.user()?.id;
+    if (!uid) return false;
+    return this.selectedCabine.includes(uid) || this.selectedPlenario.includes(uid);
+  }
+
+  operadorOptions(): MultiSelectOption[] {
+    return this.lookup.operadoresPlenario().map(op => ({ id: op.id + '', label: op.nome_completo || op.nome }));
+  }
+
   toggleOperador(grupo: 'cabine' | 'plenario', id: string, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
     const arr = grupo === 'cabine' ? this.selectedCabine : this.selectedPlenario;
@@ -392,15 +440,19 @@ export class ChecklistWizardComponent implements OnInit {
 
   private saveDraft(step: string): void {
     try {
-      const draft = {
+      const draft: Record<string, unknown> = {
         salaId: this.salaId,
         salaNome: this.salaNome,
+        dataOperacao: this.dataOperacao,
         itens: this.itens(),
         currentIndex: this.currentIndex(),
         respostas: this.respostas,
         startTime: this.startTime ? this.startTime.toISOString() : null,
         step,
         savedAt: Date.now(),
+        isMultiOperador: this.isMultiOperador,
+        selectedCabine: this.selectedCabine,
+        selectedPlenario: this.selectedPlenario,
       };
       localStorage.setItem(this.DRAFT_KEY, JSON.stringify(draft));
     } catch (e) {
@@ -441,10 +493,18 @@ export class ChecklistWizardComponent implements OnInit {
   private restoreDraft(draft: any): void {
     this.salaId = String(draft.salaId);
     this.salaNome = draft.salaNome;
+    if (draft.dataOperacao) this.dataOperacao = draft.dataOperacao;
     this.itens.set(draft.itens);
     this.currentIndex.set(draft.currentIndex);
     this.respostas = draft.respostas || {};
     this.startTime = draft.startTime ? new Date(draft.startTime) : null;
+
+    if (draft.isMultiOperador) {
+      this.isMultiOperador = true;
+      this.selectedCabine = draft.selectedCabine || [];
+      this.selectedPlenario = draft.selectedPlenario || [];
+      this.lookup.loadOperadoresPlenario();
+    }
 
     if (draft.step === 'finish') {
       this.step.set('finish');
@@ -476,6 +536,17 @@ export class ChecklistWizardComponent implements OnInit {
           editado: it['editado'] || false,
         }));
         this.editItems.set(items);
+
+        // Multi-operador
+        this.editIsMultiOperador = d['multi_operador'] === true;
+        if (this.editIsMultiOperador) {
+          this.editCabineNomes = d['operadores_cabine'] || [];
+          this.editPlenarioNomes = d['operadores_plenario'] || [];
+          this.selectedCabine = (d['operadores_cabine_ids'] || []).map(String);
+          this.selectedPlenario = (d['operadores_plenario_ids'] || []).map(String);
+          this.lookup.loadOperadoresPlenario();
+        }
+
         this.readOnly.set(true);
         this.editLoading.set(false);
       },
@@ -484,6 +555,10 @@ export class ChecklistWizardComponent implements OnInit {
         alert('Erro ao carregar checklist.');
       },
     });
+  }
+
+  canEditChecklist(): boolean {
+    return this.editData()?.['criado_por'] === this.auth.user()?.id;
   }
 
   enterEditMode(): void { this.readOnly.set(false); }
@@ -500,12 +575,13 @@ export class ChecklistWizardComponent implements OnInit {
         if (item.status === 'Falha' && item.descricao_falha.trim().length < 10) return false;
       }
     }
+    if (this.editIsMultiOperador && !this.usuarioNosOperadores()) return false;
     return !!this.dataOperacao && !!this.salaId;
   }
 
   submitEdit(): void {
     this.saving.set(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       checklist_id: this.checklistId,
       data_operacao: this.dataOperacao,
       sala_id: parseInt(this.salaId, 10),
@@ -517,6 +593,11 @@ export class ChecklistWizardComponent implements OnInit {
         valor_texto: it.tipo_widget === 'text' ? it.valor_texto.trim() : null,
       })),
     };
+
+    if (this.editIsMultiOperador) {
+      payload['operadores_cabine'] = this.selectedCabine;
+      payload['operadores_plenario'] = this.selectedPlenario;
+    }
 
     this.api.put<any>('/api/forms/checklist/editar', payload).subscribe({
       next: (res: any) => {

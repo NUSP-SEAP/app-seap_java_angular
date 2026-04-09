@@ -59,7 +59,8 @@ public class OperadorDashboardService {
         List<Object[]> detRows = em.createNativeQuery("""
                 SELECT c.ID, c.DATA_OPERACAO, s.NOME AS SALA_NOME, c.TURNO,
                        c.HORA_INICIO_TESTES, c.HORA_TERMINO_TESTES, c.OBSERVACOES,
-                       c.USB_01, c.USB_02, c.EDITADO, c.SALA_ID, c.OBSERVACOES_EDITADO
+                       c.USB_01, c.USB_02, c.EDITADO, c.SALA_ID, c.OBSERVACOES_EDITADO,
+                       c.CRIADO_POR
                 FROM FRM_CHECKLIST c
                 JOIN CAD_SALA s ON s.ID = c.SALA_ID
                 WHERE c.ID = ?1
@@ -75,6 +76,7 @@ public class OperadorDashboardService {
         result.put("usb_02", str(h[8])); result.put("editado", boolVal(h[9]));
         result.put("sala_id", num(h[10]));
         result.put("observacoes_editado", boolVal(h[11]));
+        result.put("criado_por", str(h[12]));
 
         @SuppressWarnings("unchecked")
         List<Object[]> itens = em.createNativeQuery("""
@@ -93,6 +95,43 @@ public class OperadorDashboardService {
                     "valor_texto", str(it[6]) != null ? str(it[6]) : "", "editado", boolVal(it[7])));
         }
         result.put("itens", itensList);
+
+        // Multi-operador: flag da sala + operadores (IDs e nomes)
+        long salaIdLong = num(h[10]);
+        @SuppressWarnings("unchecked")
+        List<Object> salaCheck = em.createNativeQuery(
+                "SELECT MULTI_OPERADOR FROM CAD_SALA WHERE ID = ?1")
+                .setParameter(1, salaIdLong).getResultList();
+        boolean isMultiOp = !salaCheck.isEmpty() && ((Number) salaCheck.get(0)).intValue() == 1;
+        result.put("multi_operador", isMultiOp);
+
+        if (isMultiOp) {
+            @SuppressWarnings("unchecked")
+            List<Object[]> opRows = em.createNativeQuery("""
+                    SELECT co.PAPEL, o.NOME_COMPLETO, co.OPERADOR_ID
+                    FROM FRM_CHECKLIST_OPERADOR co
+                    JOIN PES_OPERADOR o ON o.ID = co.OPERADOR_ID
+                    WHERE co.CHECKLIST_ID = ?1
+                    ORDER BY co.PAPEL, o.NOME_COMPLETO
+                    """).setParameter(1, checklistId).getResultList();
+
+            List<String> cabineNomes = new ArrayList<>(), plenarioNomes = new ArrayList<>();
+            List<String> cabineIds = new ArrayList<>(), plenarioIds = new ArrayList<>();
+            for (Object[] op : opRows) {
+                if ("CABINE".equals(str(op[0]))) {
+                    cabineNomes.add(str(op[1]));
+                    cabineIds.add(str(op[2]));
+                } else {
+                    plenarioNomes.add(str(op[1]));
+                    plenarioIds.add(str(op[2]));
+                }
+            }
+            result.put("operadores_cabine", cabineNomes);
+            result.put("operadores_plenario", plenarioNomes);
+            result.put("operadores_cabine_ids", cabineIds);
+            result.put("operadores_plenario_ids", plenarioIds);
+        }
+
         return result;
     }
 
@@ -142,7 +181,8 @@ public class OperadorDashboardService {
                        e.HORARIO_PAUTA_EDITADO, e.HORARIO_INICIO_EDITADO,
                        e.HORARIO_TERMINO_EDITADO, e.USB_01_EDITADO, e.USB_02_EDITADO,
                        e.OBSERVACOES_EDITADO, e.COMISSAO_EDITADO, e.SALA_EDITADO,
-                       e.HORA_ENTRADA_EDITADO, e.HORA_SAIDA_EDITADO
+                       e.HORA_ENTRADA_EDITADO, e.HORA_SAIDA_EDITADO,
+                       e.SUSPENSOES_EDITADO, e.OPERADOR_ID
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
                 JOIN CAD_SALA s ON s.ID = r.SALA_ID
@@ -176,6 +216,47 @@ public class OperadorDashboardService {
         result.put("sala_editado", boolVal(r[30]));
         result.put("hora_entrada_editado", boolVal(r[31]));
         result.put("hora_saida_editado", boolVal(r[32]));
+        result.put("suspensoes_editado", boolVal(r[33]));
+        result.put("operador_id", str(r[34]));
+
+        // Multi-operador: flag da sala + operadores da junction + suspensões
+        long salaIdLong = num(r[16]);
+        @SuppressWarnings("unchecked")
+        List<Object> salaCheck = em.createNativeQuery(
+                "SELECT MULTI_OPERADOR FROM CAD_SALA WHERE ID = ?1")
+                .setParameter(1, salaIdLong).getResultList();
+        boolean isMultiOp = !salaCheck.isEmpty() && ((Number) salaCheck.get(0)).intValue() == 1;
+        result.put("multi_operador", isMultiOp);
+
+        if (isMultiOp) {
+            @SuppressWarnings("unchecked")
+            List<Object[]> opRows = em.createNativeQuery("""
+                    SELECT o.NOME_COMPLETO, eo.OPERADOR_ID
+                    FROM OPR_ENTRADA_OPERADOR eo
+                    JOIN PES_OPERADOR o ON o.ID = eo.OPERADOR_ID
+                    WHERE eo.ENTRADA_ID = ?1
+                    ORDER BY o.NOME_COMPLETO
+                    """).setParameter(1, entradaId).getResultList();
+            result.put("operadores_sessao", opRows.stream().map(o -> o[0] != null ? o[0].toString() : "").toList());
+            result.put("operadores_sessao_ids", opRows.stream().map(o -> o[1] != null ? o[1].toString() : "").toList());
+
+            @SuppressWarnings("unchecked")
+            List<Object[]> suspRows = em.createNativeQuery("""
+                    SELECT s.ID, s.HORA_SUSPENSAO, s.HORA_REABERTURA, s.ORDEM
+                    FROM OPR_SUSPENSAO s WHERE s.ENTRADA_ID = ?1 ORDER BY s.ORDEM
+                    """).setParameter(1, entradaId).getResultList();
+            List<Map<String, Object>> suspList = new ArrayList<>();
+            for (Object[] sr : suspRows) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", num(sr[0]));
+                m.put("hora_suspensao", str(sr[1]));
+                m.put("hora_reabertura", str(sr[2]));
+                m.put("ordem", num(sr[3]));
+                suspList.add(m);
+            }
+            result.put("suspensoes", suspList);
+        }
+
         return result;
     }
 

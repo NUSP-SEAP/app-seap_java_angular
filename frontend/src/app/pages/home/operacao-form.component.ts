@@ -4,13 +4,14 @@ import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { LookupService } from '../../core/services/lookup.service';
+import { MultiSelectDropdownComponent, MultiSelectOption } from '../../shared/components/multi-select-dropdown.component';
 
 type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas_entradas';
 
 @Component({
   selector: 'app-operacao-form',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, MultiSelectDropdownComponent],
   template: `
     <div class="card-custom" style="max-width:800px; margin:0 auto">
 
@@ -64,15 +65,27 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           @if (isMultiOperador && !editMode()) {
             <div class="form-row">
               <label>Operadores <span class="req">*</span></label>
-              <div class="checkbox-list">
-                @for (op of lookup.operadoresPlenario(); track op.id) {
-                  <label class="checkbox-item">
-                    <input type="checkbox" [checked]="selectedOperadorIds.includes(op.id + '')"
-                      (change)="toggleOperadorRoa(op.id + '', $event)">
-                    {{ op.nome_completo }}
-                  </label>
-                }
-              </div>
+              <app-multi-select-dropdown
+                [options]="operadorOptions()"
+                [selected]="selectedOperadorIds"
+                [lockedIds]="lockedOperadorIds"
+                placeholder="Selecione operadores..."
+                (selectionChange)="selectedOperadorIds = $event" />
+            </div>
+          }
+          @if (isMultiOperador && editMode()) {
+            <div class="form-row">
+              <label>Operadores da Sessão</label>
+              @if (isRO()) {
+                <input type="text" class="field-ro" [value]="editData()?.['operadores_sessao']?.join(', ') || '—'" readonly>
+              } @else {
+                <app-multi-select-dropdown
+                  [options]="operadorOptions()"
+                  [selected]="selectedOperadorIds"
+                  [lockedIds]="lockedOperadorIds"
+                  placeholder="Selecione operadores..."
+                  (selectionChange)="selectedOperadorIds = $event" />
+              }
             </div>
           }
 
@@ -107,40 +120,51 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           </div>
           }
 
-          @if (isMultiOperador && !editMode()) {
+          @if (isMultiOperador) {
           <!-- Plenário Principal: Data + Início + Término -->
           <div class="form-grid-3">
             <div class="form-row">
               <label>Data <span class="req">*</span></label>
-              <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()">
+              <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
             </div>
             <div class="form-row">
-              <label>Início da sessão <span class="req">*</span></label>
-              <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()">
+              <label>Início da sessão <span class="req">*</span> @if (editData()?.['horario_inicio_editado']) { <span class="badge-edited">editado</span> }</label>
+              <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
             </div>
             <div class="form-row">
-              <label>Término da sessão <span class="req">*</span></label>
-              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled()">
+              <label>Término da sessão <span class="req">*</span> @if (editData()?.['horario_termino_editado']) { <span class="badge-edited">editado</span> }</label>
+              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
             </div>
           </div>
 
           <!-- Suspensões -->
           <div class="form-row">
-            <label>Suspensões</label>
-            @for (susp of suspensoes; track $index) {
-              <div class="form-grid-3" style="margin-bottom:8px; align-items:end">
-                <div class="form-row" style="margin-bottom:0">
-                  <label style="font-size:.8rem; color:var(--muted)">Suspende</label>
-                  <input type="time" [(ngModel)]="susp.hora_suspensao" [name]="'susp_' + $index" step="60">
+            <label>Suspensões @if (editData()?.['suspensoes_editado']) { <span class="badge-edited">editado</span> }</label>
+            @if (isRO()) {
+              @for (susp of suspensoes; track $index) {
+                <div class="field-value" style="margin-bottom:4px">
+                  Suspende: {{ susp.hora_suspensao || '-' }} &mdash; Reabre: {{ susp.hora_reabertura || '-' }}
                 </div>
-                <div class="form-row" style="margin-bottom:0">
-                  <label style="font-size:.8rem; color:var(--muted)">Reabre</label>
-                  <input type="time" [(ngModel)]="susp.hora_reabertura" [name]="'reab_' + $index" step="60">
+              }
+              @if (suspensoes.length === 0) {
+                <div class="field-value">Nenhuma</div>
+              }
+            } @else {
+              @for (susp of suspensoes; track $index) {
+                <div class="form-grid-3" style="margin-bottom:8px; align-items:end">
+                  <div class="form-row" style="margin-bottom:0">
+                    <label style="font-size:.8rem; color:var(--muted)">Suspende</label>
+                    <input type="time" [(ngModel)]="susp.hora_suspensao" [name]="'susp_' + $index" step="60">
+                  </div>
+                  <div class="form-row" style="margin-bottom:0">
+                    <label style="font-size:.8rem; color:var(--muted)">Reabre</label>
+                    <input type="time" [(ngModel)]="susp.hora_reabertura" [name]="'reab_' + $index" step="60">
+                  </div>
+                  <button type="button" class="btn-outline" style="height:38px; padding:0 12px; font-size:.8rem" (click)="removeSuspensao($index)">Remover</button>
                 </div>
-                <button type="button" class="btn-outline" style="height:38px; padding:0 12px; font-size:.8rem" (click)="removeSuspensao($index)">Remover</button>
-              </div>
+              }
+              <button type="button" class="btn-outline" (click)="addSuspensao()" style="margin-top:4px">+ Adicionar Suspensão</button>
             }
-            <button type="button" class="btn-outline" (click)="addSuspensao()" style="margin-top:4px">+ Adicionar Suspensão</button>
           </div>
           } @else {
 
@@ -230,12 +254,14 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           <div class="form-actions">
             @if (editMode()) {
               <button type="button" class="btn-secondary-custom" (click)="fechar()">Fechar Aba</button>
-              @if (isRO()) {
-                <button type="button" class="btn-primary-custom" (click)="enterEditMode()">Editar</button>
-              } @else {
-                <button type="submit" class="btn-primary-custom" [disabled]="saving()">
-                  {{ saving() ? 'Salvando...' : 'Salvar Alterações' }}
-                </button>
+              @if (canEditOperacao()) {
+                @if (isRO()) {
+                  <button type="button" class="btn-primary-custom" (click)="enterEditMode()">Editar</button>
+                } @else {
+                  <button type="submit" class="btn-primary-custom" [disabled]="saving()">
+                    {{ saving() ? 'Salvando...' : 'Salvar Alterações' }}
+                  </button>
+                }
               }
             } @else {
               <div class="actions-left">
@@ -371,7 +397,12 @@ export class OperacaoFormComponent implements OnInit {
   // ── Multi-operador (Plenário Principal) ──
   isMultiOperador = false;
   selectedOperadorIds: string[] = [];
+  lockedOperadorIds: string[] = [];
   suspensoes: { hora_suspensao: string; hora_reabertura: string }[] = [];
+
+  operadorOptions(): MultiSelectOption[] {
+    return this.lookup.operadoresPlenario().map(op => ({ id: op.id + '', label: op.nome_completo || op.nome }));
+  }
 
   toggleOperadorRoa(id: string, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
@@ -512,11 +543,29 @@ export class OperacaoFormComponent implements OnInit {
         this.eventoEncerrado = !!d['horario_termino'];
         this.houveAnormalidade = d['houve_anormalidade'] ? 'sim' : 'nao';
         this.originalAnormalidade = d['houve_anormalidade'] || false;
+        // Detectar multi-operador
+        this.isMultiOperador = d['multi_operador'] === true;
+        if (this.isMultiOperador) {
+          this.suspensoes = (d['suspensoes'] || []).map((s: any) => ({
+            hora_suspensao: this.extractTime(s['hora_suspensao']),
+            hora_reabertura: this.extractTime(s['hora_reabertura']),
+          }));
+          this.selectedOperadorIds = (d['operadores_sessao_ids'] || []).map(String);
+          const uid = this.auth.user()?.id || '';
+          if (uid && !this.selectedOperadorIds.includes(uid)) this.selectedOperadorIds.push(uid);
+          this.lockedOperadorIds = uid ? [uid] : [];
+          this.lookup.loadOperadoresPlenario();
+        }
+
         this.readOnly.set(true);
         this.loading.set(false);
       },
       error: () => { this.loading.set(false); alert('Erro ao carregar operação.'); },
     });
+  }
+
+  canEditOperacao(): boolean {
+    return this.editData()?.['operador_id'] === this.auth.user()?.id;
   }
 
   enterEditMode(): void { this.readOnly.set(false); }
@@ -539,7 +588,9 @@ export class OperacaoFormComponent implements OnInit {
     if (this.isMultiOperador) {
       this.lookup.loadOperadoresPlenario();
       this.suspensoes = [];
-      this.selectedOperadorIds = [];
+      const uid = this.auth.user()?.id || '';
+      this.selectedOperadorIds = uid ? [uid] : [];
+      this.lockedOperadorIds = uid ? [uid] : [];
     }
 
     // Limpar campos antes de carregar estado da nova sala
@@ -718,10 +769,10 @@ export class OperacaoFormComponent implements OnInit {
     if (!this.nomeEvento) { this.focusFirst('nome_evento'); return; }
     if (!this.horaInicio) { this.focusFirst('hora_inicio'); return; }
 
-    if (this.isMultiOperador && !this.editMode()) {
+    if (this.isMultiOperador) {
       // Validações específicas Plenário Principal
-      if (this.selectedOperadorIds.length === 0) { alert('Selecione pelo menos um operador.'); return; }
-      if (!this.horaFim) { this.focusFirst('hora_fim'); return; }
+      if (!this.editMode() && this.selectedOperadorIds.length === 0) { alert('Selecione pelo menos um operador.'); return; }
+      if (!this.horaFim && !this.isRO()) { this.focusFirst('hora_fim'); return; }
     } else {
       // Validações plenários numerados
       if (this.showComissao() && !this.comissaoId) { this.focusFirst('comissao_id'); return; }
@@ -860,9 +911,13 @@ export class OperacaoFormComponent implements OnInit {
       tipo_evento: tipoEvento,
     };
 
-    if (this.isMultiOperador && !this.editMode()) {
-      payload['operadores_ids'] = this.selectedOperadorIds;
+    if (this.isMultiOperador) {
       payload['suspensoes'] = this.suspensoes.filter(s => s.hora_suspensao || s.hora_reabertura);
+      if (this.editMode()) {
+        payload['operadores_sessao_ids'] = this.selectedOperadorIds;
+      } else {
+        payload['operadores_ids'] = this.selectedOperadorIds;
+      }
     }
 
     return payload;

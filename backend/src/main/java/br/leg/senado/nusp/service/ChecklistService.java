@@ -259,6 +259,18 @@ public class ChecklistService {
         }
         snapshot.put("itens", snapItens);
 
+        // Snapshot dos operadores (se multi-operador)
+        List<ChecklistOperador> opSnap = checklistOperadorRepo.findByChecklistId(checklistId);
+        if (!opSnap.isEmpty()) {
+            List<String> snapCabine = new ArrayList<>(), snapPlenario = new ArrayList<>();
+            for (ChecklistOperador co : opSnap) {
+                if ("CABINE".equals(co.getPapel())) snapCabine.add(co.getOperadorId());
+                else snapPlenario.add(co.getOperadorId());
+            }
+            snapshot.put("operadores_cabine", snapCabine);
+            snapshot.put("operadores_plenario", snapPlenario);
+        }
+
         // Salvar histórico
         String snapshotJson;
         try { snapshotJson = objectMapper.writeValueAsString(snapshot); }
@@ -319,6 +331,41 @@ public class ChecklistService {
                 resp.setAtualizadoPor(userId);
                 respostaRepo.save(resp);
                 totalAtualizado++;
+            }
+        }
+
+        // Atualizar operadores da junction table (Plenário Principal)
+        Sala sala = salaRepo.findById(salaId).orElse(null);
+        if (sala != null && Boolean.TRUE.equals(sala.getMultiOperador())) {
+            @SuppressWarnings("unchecked")
+            List<String> cabineOps = body.get("operadores_cabine") instanceof List
+                    ? (List<String>) body.get("operadores_cabine") : null;
+            @SuppressWarnings("unchecked")
+            List<String> plenarioOps = body.get("operadores_plenario") instanceof List
+                    ? (List<String>) body.get("operadores_plenario") : null;
+
+            // Só atualiza se o frontend enviou os dados
+            if (cabineOps != null || plenarioOps != null) {
+                checklistOperadorRepo.deleteByChecklistId(checklistId);
+
+                if (cabineOps != null) {
+                    for (String opId : cabineOps) {
+                        ChecklistOperador co = new ChecklistOperador();
+                        co.setChecklistId(checklistId);
+                        co.setOperadorId(opId);
+                        co.setPapel("CABINE");
+                        checklistOperadorRepo.save(co);
+                    }
+                }
+                if (plenarioOps != null) {
+                    for (String opId : plenarioOps) {
+                        ChecklistOperador co = new ChecklistOperador();
+                        co.setChecklistId(checklistId);
+                        co.setOperadorId(opId);
+                        co.setPapel("PLENARIO");
+                        checklistOperadorRepo.save(co);
+                    }
+                }
             }
         }
 
