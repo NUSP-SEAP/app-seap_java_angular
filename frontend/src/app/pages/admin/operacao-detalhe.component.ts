@@ -29,111 +29,153 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
           <div class="field-value">{{ d()!['sala_nome'] }}</div>
         </div>
 
-        <!-- Atividade Legislativa -->
-        <div class="field">
-          <label>Atividade Legislativa</label>
-          <div class="field-value">{{ d()!['comissao_nome'] || '-' }}</div>
-        </div>
+        @if (d()!['multi_operador']) {
+          <!-- ═══ PLENÁRIO PRINCIPAL ═══ -->
 
-        <!-- Descrição do Evento -->
-        <div class="field">
-          <label>Descrição do Evento</label>
-          <div class="field-value">{{ d()!['nome_evento'] }}</div>
-        </div>
+          <!-- Descrição do Evento -->
+          <div class="field">
+            <label>Descrição do Evento</label>
+            <div class="field-value">{{ d()!['nome_evento'] }}</div>
+          </div>
 
-        <!-- Responsável pelo Evento -->
-        <div class="field">
-          <label>Responsável pelo Evento</label>
-          <div class="field-value">{{ d()!['responsavel_evento'] || '-' }}</div>
-        </div>
+          <!-- Data + Início + Término -->
+          <div class="field-row grid-3">
+            <div class="field">
+              <label>Data</label>
+              <div class="field-value">{{ d()!['data'] | fmtDate }}</div>
+            </div>
+            <div class="field">
+              <label>Início da sessão</label>
+              <div class="field-value">{{ d()!['horario_inicio'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Término da sessão</label>
+              <div class="field-value">{{ d()!['horario_termino'] | fmtTime }}</div>
+            </div>
+          </div>
 
-        <!-- Datas e Horários -->
-        <div class="field-row grid-4">
+          <!-- Suspensões -->
           <div class="field">
-            <label>Data</label>
-            <div class="field-value">{{ d()!['data'] | fmtDate }}</div>
+            <label>Suspensões</label>
+            @if (asArray(d()!['suspensoes']).length > 0) {
+              @for (s of asArray(d()!['suspensoes']); track $index) {
+                <div class="field-value" style="margin-bottom:4px">
+                  Suspende: {{ s['hora_suspensao'] }} &mdash; Reabre: {{ s['hora_reabertura'] }}
+                </div>
+              }
+            } @else {
+              <div class="field-value">Nenhuma</div>
+            }
           </div>
-          <div class="field">
-            <label>Horário de Pauta</label>
-            <div class="field-value">{{ d()!['horario_pauta'] | fmtTime }}</div>
-          </div>
-          <div class="field">
-            <label>Hora de Início</label>
-            <div class="field-value">{{ d()!['horario_inicio'] | fmtTime }}</div>
-          </div>
-          <div class="field">
-            <label>Evento Encerrado?</label>
-            <div class="field-value">{{ d()!['horario_termino'] ? 'Sim' : 'Não' }}</div>
-          </div>
-        </div>
 
-        <div class="field-row grid-3">
+          <!-- Houve Anormalidade -->
           <div class="field">
-            <label>Hora de Término</label>
-            <div class="field-value">{{ d()!['horario_termino'] | fmtTime }}</div>
+            <label>Houve Anormalidade?</label>
+            <div class="field-value" [class]="d()!['houve_anormalidade'] ? 'val-falha' : ''">
+              {{ d()!['houve_anormalidade'] ? 'Sim' : 'Não' }}
+            </div>
           </div>
-          <div class="field">
-            <label>Hora de Entrada (operador)</label>
-            <div class="field-value">{{ d()!['hora_entrada'] | fmtTime }}</div>
-          </div>
-          <div class="field">
-            <label>Hora de Saída (operador)</label>
-            <div class="field-value">{{ d()!['hora_saida'] | fmtTime }}</div>
-          </div>
-        </div>
 
-        <!-- Trilha dos Gravadores -->
-        <div class="field-row grid-2">
-          <div class="field">
-            <label>Trilha do Gravador 01</label>
-            <div class="field-value">{{ d()!['usb_01'] || '-' }}</div>
-          </div>
-          <div class="field">
-            <label>Trilha do Gravador 02</label>
-            <div class="field-value">{{ d()!['usb_02'] || '-' }}</div>
-          </div>
-        </div>
-
-        <!-- Observações -->
-        <div class="field">
-          <label>Observações</label>
-          <div class="field-value obs-value">{{ d()!['observacoes'] || '' }}</div>
-        </div>
-
-        <!-- Houve Anormalidade -->
-        <div class="field">
-          <label>Houve Anormalidade?</label>
-          <div class="field-value" [class]="d()!['houve_anormalidade'] ? 'val-falha' : ''">
-            {{ d()!['houve_anormalidade'] ? 'Sim' : 'Não' }}
-          </div>
-        </div>
-
-        <!-- Operadores -->
-        @if (d()!['operadores_sessao']) {
-          <div class="field">
-            <label>Operadores da Sessão</label>
-            <div class="field-value">{{ asArray(d()!['operadores_sessao']).join(', ') }}</div>
-          </div>
+          <!-- Preenchido por -->
           <div class="field">
             <label>Preenchido por</label>
             <div class="field-value">{{ d()!['operador_nome'] }}</div>
           </div>
+
+          <!-- Operadores da Sessão -->
+          @if (d()!['operadores_sessao']) {
+            <div class="field">
+              <label>Operadores da Sessão</label>
+              <div class="field-value">{{ asArray(d()!['operadores_sessao']).join(', ') }}</div>
+            </div>
+          }
+
         } @else {
+          <!-- ═══ PLENÁRIOS NUMERADOS ═══ -->
+
+          <!-- Atividade Legislativa -->
+          <div class="field">
+            <label>Atividade Legislativa</label>
+            <div class="field-value">{{ d()!['comissao_nome'] || '-' }}</div>
+          </div>
+
+          <!-- Descrição do Evento -->
+          <div class="field">
+            <label>Descrição do Evento</label>
+            <div class="field-value">{{ d()!['nome_evento'] }}</div>
+          </div>
+
+          <!-- Responsável pelo Evento -->
+          <div class="field">
+            <label>Responsável pelo Evento</label>
+            <div class="field-value">{{ d()!['responsavel_evento'] || '-' }}</div>
+          </div>
+
+          <!-- Datas e Horários -->
+          <div class="field-row grid-4">
+            <div class="field">
+              <label>Data</label>
+              <div class="field-value">{{ d()!['data'] | fmtDate }}</div>
+            </div>
+            <div class="field">
+              <label>Horário de Pauta</label>
+              <div class="field-value">{{ d()!['horario_pauta'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Hora de Início</label>
+              <div class="field-value">{{ d()!['horario_inicio'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Evento Encerrado?</label>
+              <div class="field-value">{{ d()!['horario_termino'] ? 'Sim' : 'Não' }}</div>
+            </div>
+          </div>
+
+          <div class="field-row grid-3">
+            <div class="field">
+              <label>Hora de Término</label>
+              <div class="field-value">{{ d()!['horario_termino'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Hora de Entrada (operador)</label>
+              <div class="field-value">{{ d()!['hora_entrada'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Hora de Saída (operador)</label>
+              <div class="field-value">{{ d()!['hora_saida'] | fmtTime }}</div>
+            </div>
+          </div>
+
+          <!-- Trilha dos Gravadores -->
+          <div class="field-row grid-2">
+            <div class="field">
+              <label>Trilha do Gravador 01</label>
+              <div class="field-value">{{ d()!['usb_01'] || '-' }}</div>
+            </div>
+            <div class="field">
+              <label>Trilha do Gravador 02</label>
+              <div class="field-value">{{ d()!['usb_02'] || '-' }}</div>
+            </div>
+          </div>
+
+          <!-- Observações -->
+          <div class="field">
+            <label>Observações</label>
+            <div class="field-value obs-value">{{ d()!['observacoes'] || '' }}</div>
+          </div>
+
+          <!-- Houve Anormalidade -->
+          <div class="field">
+            <label>Houve Anormalidade?</label>
+            <div class="field-value" [class]="d()!['houve_anormalidade'] ? 'val-falha' : ''">
+              {{ d()!['houve_anormalidade'] ? 'Sim' : 'Não' }}
+            </div>
+          </div>
+
+          <!-- Operador Responsável -->
           <div class="field">
             <label>Operador Responsável</label>
             <div class="field-value">{{ d()!['operador_nome'] }}</div>
-          </div>
-        }
-
-        <!-- Suspensões -->
-        @if (d()!['suspensoes']) {
-          <div class="field">
-            <label>Suspensões</label>
-            @for (s of asArray(d()!['suspensoes']); track $index) {
-              <div class="field-value" style="margin-bottom:4px">
-                Suspende: {{ s['hora_suspensao'] }} &mdash; Reabre: {{ s['hora_reabertura'] }}
-              </div>
-            }
           </div>
         }
 

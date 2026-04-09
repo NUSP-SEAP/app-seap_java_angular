@@ -139,7 +139,12 @@ public class AdminDashboardController {
 
     @GetMapping("/dashboard/operacoes/entradas-sessao")
     public ResponseEntity<?> entradasDeSessao(@RequestParam("registro_id") long registroId) {
-        return ResponseEntity.ok(Map.of("ok", true, "data", dashboardService.listEntradasDeSessao(registroId)));
+        Map<String, Object> result = dashboardService.listEntradasDeSessao(registroId);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("ok", true);
+        response.put("data", result.get("entradas"));
+        response.put("is_plenario_principal", result.get("is_plenario_principal"));
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/operacao/detalhe")
@@ -240,14 +245,23 @@ public class AdminDashboardController {
         for (Map<String, Object> r : rawRows) {
             Map<String, Object> m = new java.util.LinkedHashMap<>(r);
             m.put("sala", r.getOrDefault("sala_nome", "--"));
-            m.put("autor", r.getOrDefault("criado_por_nome", "--"));
             Object chk = r.get("checklist_do_dia_ok");
             m.put("verificacao", (chk != null && ((Number) chk).intValue() == 1) ? "Realizado" : "Não Realizado");
-            Object ea = r.get("em_aberto");
-            m.put("em_aberto", (ea != null && ((Number) ea).intValue() == 1) ? "Sim" : "Não");
+            // Evento formatado (sigla comissão + nome_evento)
+            String comNome = r.get("comissao_nome") != null ? r.get("comissao_nome").toString() : "";
+            String ultEvento = r.get("ultimo_evento") != null ? r.get("ultimo_evento").toString() : "";
+            if (!comNome.isEmpty() && !ultEvento.isEmpty()) {
+                int idx2 = comNome.indexOf(" - ");
+                String sigla = idx2 >= 0 ? comNome.substring(0, idx2).trim() : comNome.trim();
+                m.put("evento_display", sigla + " - " + ultEvento);
+            } else {
+                m.put("evento_display", ultEvento);
+            }
             Object id = r.get("id");
             if (id != null) {
-                m.put("entradas", dashboardService.listEntradasDeSessao(((Number) id).longValue()));
+                Map<String, Object> sessaoData = dashboardService.listEntradasDeSessao(((Number) id).longValue());
+                m.put("entradas", sessaoData.get("entradas"));
+                m.put("is_plenario_principal", sessaoData.get("is_plenario_principal"));
             }
             rows.add(m);
         }

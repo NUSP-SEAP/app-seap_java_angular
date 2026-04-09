@@ -135,14 +135,21 @@ public class AdminDashboardService {
     public PagedResult listOperacoes(int page, int limit, String search, String sort, String dir,
                                       Map<String, Object> periodo, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
-                "r.ID, r.DATA AS data, s.NOME AS sala_nome, r.EM_ABERTO, " +
-                "CASE WHEN r.CHECKLIST_DO_DIA_ID IS NOT NULL THEN 1 ELSE 0 END AS CHECKLIST_DO_DIA_OK, " +
-                "o.NOME_COMPLETO AS criado_por_nome",
+                "r.ID, r.DATA AS data, s.NOME AS sala_nome, " +
+                "CASE WHEN r.CHECKLIST_DO_DIA_ID IS NOT NULL THEN 1 ELSE 0 END AS checklist_do_dia_ok, " +
+                "ult.NOME_EVENTO AS ultimo_evento, " +
+                "c.NOME AS comissao_nome, " +
+                "ult.HORARIO_PAUTA AS ultimo_pauta, " +
+                "ult.HORARIO_INICIO AS ultimo_inicio, " +
+                "ult.HORARIO_TERMINO AS ultimo_termino",
                 "FROM OPR_REGISTRO_AUDIO r JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
-                "LEFT JOIN PES_OPERADOR o ON o.ID = r.CRIADO_POR",
-                "r.DATA", OP_SESS_SORT, List.of("s.NOME"),
-                Map.of("data", "r.DATA", "sala", "s.NOME", "em_aberto", "r.EM_ABERTO"),
-                Map.of("data", "date", "sala", "text", "em_aberto", "bool"),
+                "JOIN (SELECT REGISTRO_ID, NOME_EVENTO, HORARIO_PAUTA, HORARIO_INICIO, HORARIO_TERMINO, COMISSAO_ID, " +
+                "ROW_NUMBER() OVER (PARTITION BY REGISTRO_ID ORDER BY ORDEM DESC, SEQ DESC, ID DESC) AS RN " +
+                "FROM OPR_REGISTRO_ENTRADA) ult ON ult.REGISTRO_ID = r.ID AND ult.RN = 1 " +
+                "LEFT JOIN CAD_COMISSAO c ON c.ID = ult.COMISSAO_ID",
+                "r.DATA", OP_SESS_SORT, List.of("s.NOME", "ult.NOME_EVENTO", "c.NOME"),
+                Map.of("data", "r.DATA", "sala", "s.NOME"),
+                Map.of("data", "date", "sala", "text"),
                 page, limit, search, sort, dir, periodo, filters);
     }
 
@@ -200,6 +207,12 @@ public class AdminDashboardService {
         result.put("editado", boolVal(r[20])); result.put("sala_id", num(r[21]));
         result.put("comissao_nome", str(r[22]));
 
+        // Detectar multi_operador (Plenário Principal)
+        List<?> salaFlag = em.createNativeQuery("SELECT MULTI_OPERADOR FROM CAD_SALA WHERE ID = ?1")
+                .setParameter(1, num(r[21])).getResultList();
+        boolean isMultiOp = !salaFlag.isEmpty() && boolVal(salaFlag.get(0));
+        result.put("multi_operador", isMultiOp);
+
         // Operadores da junction table (Plenário Principal)
         @SuppressWarnings("unchecked")
         List<Object> opRows = em.createNativeQuery("""
@@ -233,29 +246,69 @@ public class AdminDashboardService {
     // ══ Entradas de uma sessão ═════════════════════════════════
 
     @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> listEntradasDeSessao(long registroId) {
+    public Map<String, Object> listEntradasDeSessao(long registroId) {
+        // Detectar se é Plenário Principal (multi_operador)
+        List<Object[]> salaRows = em.createNativeQuery("""
+                SELECT s.NOME, s.MULTI_OPERADOR
+                FROM OPR_REGISTRO_AUDIO r
+                JOIN CAD_SALA s ON s.ID = r.SALA_ID
+                WHERE r.ID = ?1
+                """).setParameter(1, registroId).getResultList();
+        boolean isPlenarioPrincipal = !salaRows.isEmpty() && boolVal(salaRows.get(0)[1]);
+
         List<Object[]> rows = em.createNativeQuery("""
                 SELECT e.ID, e.ORDEM, o.NOME_COMPLETO, e.TIPO_EVENTO,
                        e.NOME_EVENTO, e.HORARIO_PAUTA, e.HORARIO_INICIO, e.HORARIO_TERMINO,
-                       e.HOUVE_ANORMALIDADE
+                       e.HOUVE_ANORMALIDADE, e.HORA_ENTRADA, e.HORA_SAIDA, e.OBSERVACOES
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID
                 WHERE e.REGISTRO_ID = ?1
                 ORDER BY e.ORDEM ASC, e.SEQ ASC
                 """).setParameter(1, registroId).getResultList();
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object[] r : rows) {
-            result.add(Map.of(
-                    "id", num(r[0]), "ordem", num(r[1]),
-                    "operador", str(r[2]) != null ? str(r[2]) : "",
-                    "tipo", str(r[3]) != null ? str(r[3]) : "",
-                    "evento", str(r[4]) != null ? str(r[4]) : "",
-                    "pauta", str(r[5]) != null ? str(r[5]) : "",
-                    "inicio", str(r[6]) != null ? str(r[6]) : "",
-                    "fim", str(r[7]) != null ? str(r[7]) : "",
-                    "anormalidade", boolVal(r[8])
-            ));
+
+        List<Map<String, Object>> entradas = new ArrayList<>();
+
+        if (isPlenarioPrincipal) {
+            // Plenário Principal: cada entrada mostra preenchido_por, evento, anormalidade + lista de operadores
+            for (Object[] r : rows) {
+                Long entradaId = num(r[0]);
+                // Buscar operadores da junction table
+                List<Object> opRows = em.createNativeQuery("""
+                        SELECT o2.NOME_COMPLETO
+                        FROM OPR_ENTRADA_OPERADOR eo
+                        JOIN PES_OPERADOR o2 ON o2.ID = eo.OPERADOR_ID
+                        WHERE eo.ENTRADA_ID = ?1
+                        ORDER BY eo.ID
+                        """).setParameter(1, entradaId).getResultList();
+                List<String> operadores = opRows.stream()
+                        .map(o -> o != null ? o.toString() : "").toList();
+
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", entradaId);
+                m.put("preenchido_por", str(r[2]) != null ? str(r[2]) : "");
+                m.put("evento", str(r[4]) != null ? str(r[4]) : "");
+                m.put("anormalidade", boolVal(r[8]));
+                m.put("operadores", operadores);
+                entradas.add(m);
+            }
+        } else {
+            // Plenários numerados: Nº, Operador, Início Operação, Fim Operação, Observações, Anom?
+            for (Object[] r : rows) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", num(r[0]));
+                m.put("ordem", num(r[1]));
+                m.put("operador", str(r[2]) != null ? str(r[2]) : "");
+                m.put("hora_entrada", str(r[9]) != null ? str(r[9]) : "");
+                m.put("hora_saida", str(r[10]) != null ? str(r[10]) : "");
+                m.put("observacoes", str(r[11]) != null ? str(r[11]) : "");
+                m.put("anormalidade", boolVal(r[8]));
+                entradas.add(m);
+            }
         }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("is_plenario_principal", isPlenarioPrincipal);
+        result.put("entradas", entradas);
         return result;
     }
 
@@ -430,6 +483,7 @@ public class AdminDashboardService {
 
         List<Object[]> rows = q.getResultList();
         List<Map<String, Object>> result = new ArrayList<>();
+        Set<Long> multiOpEntradaIds = new HashSet<>();
         for (Object[] r : rows) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("registro_id", r[0]);
@@ -447,7 +501,52 @@ public class AdminDashboardService {
             m.put("operador_nome_exibicao", str(r[11]));
             m.put("comissao_nome", str(r[12]));
             result.add(m);
+
+            if ("Plenário Principal".equals(str(r[3])) && r[4] != null) {
+                multiOpEntradaIds.add(((Number) r[4]).longValue());
+            }
         }
+
+        // Para Plenário Principal: buscar operadores da junction table OPR_ENTRADA_OPERADOR
+        if (!multiOpEntradaIds.isEmpty()) {
+            // Construir IN clause com parâmetros posicionais (native query não expande coleções)
+            StringBuilder inClause = new StringBuilder();
+            List<Long> idList = new ArrayList<>(multiOpEntradaIds);
+            for (int i = 0; i < idList.size(); i++) {
+                if (i > 0) inClause.append(",");
+                inClause.append("?").append(i + 1);
+            }
+            Query opQuery = em.createNativeQuery(
+                    "SELECT eo.ENTRADA_ID, o.NOME_EXIBICAO " +
+                    "FROM OPR_ENTRADA_OPERADOR eo " +
+                    "JOIN PES_OPERADOR o ON o.ID = eo.OPERADOR_ID " +
+                    "WHERE eo.ENTRADA_ID IN (" + inClause + ") " +
+                    "ORDER BY eo.ENTRADA_ID, eo.ID");
+            for (int i = 0; i < idList.size(); i++) {
+                opQuery.setParameter(i + 1, idList.get(i));
+            }
+            @SuppressWarnings("unchecked")
+            List<Object[]> opRows = opQuery.getResultList();
+
+            // Agrupar por entrada_id
+            Map<Long, List<String>> opsByEntrada = new LinkedHashMap<>();
+            for (Object[] or2 : opRows) {
+                Long eid = ((Number) or2[0]).longValue();
+                opsByEntrada.computeIfAbsent(eid, k -> new ArrayList<>()).add(str(or2[1]));
+            }
+
+            // Injetar nomes na lista de resultados
+            for (Map<String, Object> m : result) {
+                Object eidObj = m.get("entrada_id");
+                if (eidObj == null) continue;
+                Long eid = ((Number) eidObj).longValue();
+                List<String> ops = opsByEntrada.get(eid);
+                if (ops != null && !ops.isEmpty()) {
+                    m.put("multi_op_names", ops);
+                }
+            }
+        }
+
         return result;
     }
 

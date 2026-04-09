@@ -20,9 +20,9 @@ import { ApiService } from '../../core/services/api.service';
           <div class="form-row"><label>Senha *</label><input type="password" [(ngModel)]="senha" name="senha" required minlength="6"></div>
           <div class="form-row"><label>Confirmar Senha *</label><input type="password" [(ngModel)]="confirmarSenha" name="confirmar_senha" required></div>
         </div>
-        <div class="form-row" style="display:flex; align-items:center; gap:8px; margin-top:4px">
-          <input type="checkbox" [(ngModel)]="plenarioPrincipal" name="plenario_principal" id="plenario_principal">
-          <label for="plenario_principal" style="margin:0; cursor:pointer">Operador de Plenário Principal</label>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px">
+          <input type="checkbox" [(ngModel)]="plenarioPrincipal" name="plenario_principal" id="plenario_principal" style="width:auto; margin:0">
+          <label for="plenario_principal" style="margin:0; cursor:pointer; font-weight:500; font-size:.9375rem">Operador de Plenário Principal</label>
         </div>
         <div class="form-row">
           <label>Foto (opcional)</label>

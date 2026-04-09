@@ -98,4 +98,5 @@ public class RegistroOperacaoOperador extends AuditableEntity {
     @Column(name = "SALA_EDITADO",                 nullable = false) private Boolean salaEditado = false;
     @Column(name = "HORA_ENTRADA_EDITADO",         nullable = false) private Boolean horaEntradaEditado = false;
     @Column(name = "HORA_SAIDA_EDITADO",           nullable = false) private Boolean horaSaidaEditado = false;
+    @Column(name = "SUSPENSOES_EDITADO",           nullable = false) private Boolean suspensoesEditado = false;
 }

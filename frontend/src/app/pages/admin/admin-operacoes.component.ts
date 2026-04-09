@@ -57,43 +57,70 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
               <th style="width:30px"></th>
               <th><app-column-filter [col]="sessCols[0]" [distinctValues]="gd(opMeta(),'sala')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSortEvt($event)" (filterChange)="onOpFilterEvt($event)" /></th>
               <th><app-column-filter [col]="sessCols[1]" [distinctValues]="gd(opMeta(),'data')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSortEvt($event)" (filterChange)="onOpFilterEvt($event)" /></th>
-              <th>1º Registro por</th>
-              <th>Checklist?</th>
-              <th>Em Aberto?</th>
+              <th>Evento</th>
+              <th>Pauta</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Verificação</th>
             </tr></thead>
             <tbody>
               @if (opRows().length === 0) {
-                <tr><td colspan="6" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhuma sessão.' }}</td></tr>
+                <tr><td colspan="8" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhuma sessão.' }}</td></tr>
               } @else {
                 @for (s of opRows(); track s['id']) {
                   <tr class="row-clickable" (click)="toggleSessao(s)">
                     <td><span class="btn-toggle">{{ s['_exp'] ? '▼' : '▶' }}</span></td>
                     <td><strong>{{ s['sala_nome'] }}</strong></td>
                     <td>{{ s['data'] | fmtDate }}</td>
-                    <td>{{ s['criado_por_nome'] }}</td>
+                    <td [title]="formatEvento(s)">{{ truncate(formatEvento(s), 30) }}</td>
+                    <td>{{ s['ultimo_pauta'] | fmtTime }}</td>
+                    <td>{{ s['ultimo_inicio'] | fmtTime }}</td>
+                    <td>{{ s['ultimo_termino'] | fmtTime }}</td>
                     <td [style.color]="s['checklist_do_dia_ok'] ? 'var(--color-green)' : 'var(--muted)'">{{ s['checklist_do_dia_ok'] ? 'Realizado' : 'Não Realizado' }}</td>
-                    <td [style.color]="s['em_aberto'] ? 'var(--color-blue)' : 'var(--text)'" [style.font-weight]="s['em_aberto'] ? '700' : '400'">{{ s['em_aberto'] ? 'Sim' : 'Não' }}</td>
                   </tr>
                   @if (s['_exp']) {
                     <tr class="accordion-row">
-                      <td colspan="6">
+                      <td colspan="8">
                         @if (!s['_entradas']) {
                           <p class="text-muted-sm">Carregando entradas...</p>
                         } @else if (asArr(s['_entradas']).length === 0) {
                           <p class="text-muted-sm">Nenhuma entrada registrada nesta sessão.</p>
+                        } @else if (s['_is_plenario_principal']) {
+                          <!-- Subtabela: Plenário Principal -->
+                          @for (e of asArr(s['_entradas']); track e['id']||$index) {
+                            <table class="sub-table">
+                              <thead><tr><th>Operador</th><th>Anom?</th></tr></thead>
+                              <tbody>
+                                @if (asArr(e['operadores']).length > 0) {
+                                  @for (op of asArr(e['operadores']); track $index) {
+                                    <tr class="row-clickable" (dblclick)="openEntrada(e)">
+                                      <td>{{ op }}</td>
+                                      @if ($first) {
+                                        <td [attr.rowspan]="asArr(e['operadores']).length" [class]="e['anormalidade'] ? 'badge-falha' : 'badge-ok'" style="vertical-align:middle">{{ e['anormalidade'] ? 'SIM' : 'Não' }}</td>
+                                      }
+                                    </tr>
+                                  }
+                                } @else {
+                                  <tr class="row-clickable" (dblclick)="openEntrada(e)">
+                                    <td>{{ e['preenchido_por'] }}</td>
+                                    <td [class]="e['anormalidade'] ? 'badge-falha' : 'badge-ok'">{{ e['anormalidade'] ? 'SIM' : 'Não' }}</td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          }
                         } @else {
+                          <!-- Subtabela: Plenários numerados -->
                           <table class="sub-table">
-                            <thead><tr><th>Nº</th><th>Operador</th><th>Tipo</th><th>Evento</th><th>Pauta</th><th>Início</th><th>Fim</th><th>Anom?</th></tr></thead>
+                            <thead><tr><th>Nº</th><th>Operador</th><th>Início Operação</th><th>Fim Operação</th><th>Observações</th><th>Anom?</th></tr></thead>
                             <tbody>
                               @for (e of asArr(s['_entradas']); track e['id']||$index) {
                                 <tr class="row-clickable" (dblclick)="openEntrada(e)">
                                   <td>{{ e['ordem'] }}º</td>
                                   <td>{{ e['operador'] }}</td>
-                                  <td>{{ e['tipo'] }}</td>
-                                  <td>{{ e['evento'] }}</td>
-                                  <td>{{ e['pauta'] | fmtTime }}</td>
-                                  <td>{{ e['inicio'] | fmtTime }}</td>
-                                  <td>{{ e['fim'] | fmtTime }}</td>
+                                  <td>{{ e['hora_entrada'] | fmtTime }}</td>
+                                  <td>{{ e['hora_saida'] | fmtTime }}</td>
+                                  <td [title]="e['observacoes']">{{ truncate(e['observacoes'], 20) }}</td>
                                   <td [class]="e['anormalidade'] ? 'badge-falha' : 'badge-ok'">{{ e['anormalidade'] ? 'SIM' : 'Não' }}</td>
                                 </tr>
                               }
@@ -287,6 +314,7 @@ export class AdminOperacoesComponent implements OnInit {
       this.api.get<any>('/api/admin/dashboard/operacoes/entradas-sessao', { registro_id: s['id'] as number }).subscribe({
         next: (res: any) => {
           s['_entradas'] = res?.data ?? [];
+          s['_is_plenario_principal'] = res?.is_plenario_principal ?? false;
           this.opRows.set([...this.opRows()]);
         },
         error: () => { s['_entradas'] = []; this.opRows.set([...this.opRows()]); },
@@ -393,4 +421,15 @@ export class AdminOperacoesComponent implements OnInit {
   gd = getDistinct;
   asArr(v: unknown): any[] { return Array.isArray(v) ? v : []; }
   truncate(v: unknown, max: number): string { const s = String(v || ''); return s.length > max ? s.substring(0, max) + '...' : s; }
+
+  formatEvento(s: any): string {
+    const evento = s['ultimo_evento'] || '';
+    const comissao = s['comissao_nome'] || '';
+    if (!evento) return '';
+    if (!comissao) return evento;
+    // Extrair sigla (antes do primeiro " - ")
+    const idx = comissao.indexOf(' - ');
+    const sigla = idx >= 0 ? comissao.substring(0, idx).trim() : comissao.trim();
+    return sigla + ' - ' + evento;
+  }
 }
