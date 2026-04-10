@@ -264,9 +264,10 @@ public class OperacaoService {
         // Proteção contra duplicação: mesmo operador + mesma sala em < 5 min
         Number dupCheck = (Number) entityManager.createNativeQuery("""
                 SELECT CASE WHEN EXISTS (
-                    SELECT 1 FROM OPR_REGISTRO_AUDIO
-                    WHERE SALA_ID = ?1 AND CRIADO_POR = ?2
-                    AND CRIADO_EM >= SYSTIMESTAMP - INTERVAL '5' MINUTE
+                    SELECT 1 FROM OPR_REGISTRO_ENTRADA e
+                    JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
+                    WHERE r.SALA_ID = ?1 AND e.OPERADOR_ID = ?2
+                    AND e.CRIADO_EM >= SYSTIMESTAMP - INTERVAL '5' MINUTE
                 ) THEN 1 ELSE 0 END FROM DUAL
                 """).setParameter(1, salaId).setParameter(2, userId).getSingleResult();
         if (dupCheck.intValue() == 1) {
@@ -307,6 +308,28 @@ public class OperacaoService {
         List<Map<String, Object>> todasEntradas = (List<Map<String, Object>>) estado.get("entradas_sessao");
         int ordem = todasEntradas.size() + 1;
 
+        // Validação: hora_entrada do 2º+ operador >= hora_saida do anterior
+        Sala sala = salaRepo.findById(salaId).orElse(null);
+        boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
+        if (!isMultiOp && ordem >= 2 && horaEntrada != null) {
+            Map<String, Object> entradaAnterior = todasEntradas.stream()
+                    .filter(e -> ((Number) e.get("ordem")).intValue() == ordem - 1)
+                    .findFirst().orElse(null);
+            if (entradaAnterior != null) {
+                String horaSaidaAnterior = (String) entradaAnterior.get("hora_saida");
+                if (horaSaidaAnterior != null && !horaSaidaAnterior.isBlank()) {
+                    String heNorm = horaEntrada.substring(0, 5);
+                    String hsNorm = horaSaidaAnterior.substring(0, 5);
+                    if (heNorm.compareTo(hsNorm) < 0) {
+                        String nomeAnterior = (String) entradaAnterior.get("operador_nome");
+                        throw new ServiceValidationException(
+                            "O horário de entrada não pode ser anterior ao horário de saída do operador anterior. " +
+                            "O operador " + nomeAnterior + " registrou saída às " + hsNorm + ".");
+                    }
+                }
+            }
+        }
+
         RegistroOperacaoOperador entrada = new RegistroOperacaoOperador();
         entrada.setRegistroId(registroId);
         entrada.setOperadorId(userId);
@@ -329,8 +352,6 @@ public class OperacaoService {
         entrada = entradaRepo.save(entrada);
 
         // Multi-operador: salvar junction table + suspensões + auto-encerrar
-        Sala sala = salaRepo.findById(salaId).orElse(null);
-        boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
 
         if (isMultiOp) {
             @SuppressWarnings("unchecked")
@@ -437,6 +458,35 @@ public class OperacaoService {
         }
 
         Long registroId = entradaRepo.findRegistroIdByEntradaId(entradaId).orElse(0L);
+
+        // Validação: hora_entrada do 2º+ operador >= hora_saida do anterior
+        if (!isMultiOp && horaEntrada != null && registroId > 0) {
+            List<?> ordemResult = entityManager.createNativeQuery(
+                "SELECT ORDEM FROM OPR_REGISTRO_ENTRADA WHERE ID = ?1")
+                .setParameter(1, entradaId).getResultList();
+            int ordemAtual = !ordemResult.isEmpty() ? ((Number) ordemResult.get(0)).intValue() : 1;
+            if (ordemAtual >= 2) {
+                List<?> anteriorResult = entityManager.createNativeQuery(
+                    "SELECT e.HORA_SAIDA, o.NOME_EXIBICAO FROM OPR_REGISTRO_ENTRADA e " +
+                    "JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID " +
+                    "WHERE e.REGISTRO_ID = ?1 AND e.ORDEM = ?2")
+                    .setParameter(1, registroId).setParameter(2, ordemAtual - 1).getResultList();
+                if (!anteriorResult.isEmpty()) {
+                    Object[] ant = (Object[]) anteriorResult.get(0);
+                    String horaSaidaAnt = ant[0] != null ? ant[0].toString().strip() : null;
+                    String nomeAnt = ant[1] != null ? ant[1].toString() : "anterior";
+                    if (horaSaidaAnt != null && !horaSaidaAnt.isBlank()) {
+                        String heNorm = horaEntrada.substring(0, 5);
+                        String hsNorm = horaSaidaAnt.length() >= 5 ? horaSaidaAnt.substring(0, 5) : horaSaidaAnt;
+                        if (heNorm.compareTo(hsNorm) < 0) {
+                            throw new ServiceValidationException(
+                                "O horário de entrada não pode ser anterior ao horário de saída do operador anterior. " +
+                                "O operador " + nomeAnt + " registrou saída às " + hsNorm + ".");
+                        }
+                    }
+                }
+            }
+        }
 
         // Snapshot para histórico
         List<Object[]> snapRows = entradaRepo.getSnapshot(entradaId);

@@ -38,12 +38,15 @@ public class SessaoSchedulerService {
                 AND e.HORA_SAIDA IS NOT NULL
                 """).executeUpdate();
 
-        // Query 2 — Fecha as sessões usando dados da última entrada (maior hora_saida)
+        // Query 2 — Fecha as sessões
+        // FECHADO_EM = DATA da sessão + maior HORA_SAIDA (VARCHAR HH:MM:SS) → TIMESTAMP
+        // FECHADO_POR = OPERADOR_ID da última entrada
         int fechadas = em.createNativeQuery("""
                 UPDATE OPR_REGISTRO_AUDIO r SET
                     r.EM_ABERTO = 0,
                     r.FECHADO_EM = (
-                        SELECT MAX(e.HORA_SAIDA) FROM OPR_REGISTRO_ENTRADA e
+                        SELECT CAST(r.DATA AS TIMESTAMP) + TO_DSINTERVAL('0 ' || MAX(e.HORA_SAIDA))
+                        FROM OPR_REGISTRO_ENTRADA e
                         WHERE e.REGISTRO_ID = r.ID AND e.HORA_SAIDA IS NOT NULL
                     ),
                     r.FECHADO_POR = (

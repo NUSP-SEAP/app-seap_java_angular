@@ -40,13 +40,19 @@ import { environment } from '../../environments/environment';
     .site-header__right {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
+      min-width: 0;
     }
     .user-avatar {
       width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
       border: 2px solid rgba(255,255,255,.5);
+      flex-shrink: 0;
     }
-    .user-greeting { color: #fff; font-size: 0.9rem; font-weight: 600; }
+    .user-greeting {
+      color: #fff; font-size: 0.9rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 180px;
+    }
     .btn-logout {
       background: #7f1d1d;
       color: #fee2e2;
@@ -56,7 +62,16 @@ import { environment } from '../../environments/environment';
       font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
+      flex-shrink: 0;
       &:hover { background: #991b1b; }
+    }
+    @media (max-width: 480px) {
+      .site-header__inner { padding: 0 10px; }
+      .site-logo { width: 140px; height: 35px; }
+      .site-header__right { gap: 8px; }
+      .user-greeting { max-width: 90px; font-size: .8rem; }
+      .user-avatar { width: 28px; height: 28px; }
+      .btn-logout { padding: 4px 12px; font-size: .75rem; }
     }
   `],
 })

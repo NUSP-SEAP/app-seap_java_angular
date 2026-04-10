@@ -143,7 +143,7 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             @if (isRO()) {
               @for (susp of suspensoes; track $index) {
                 <div class="field-value" style="margin-bottom:4px">
-                  Suspende: {{ susp.hora_suspensao || '-' }} &mdash; Reabre: {{ susp.hora_reabertura || '-' }}
+                  Suspensa em: {{ susp.hora_suspensao || '-' }} &mdash; Reaberta em: {{ susp.hora_reabertura || '-' }}
                 </div>
               }
               @if (suspensoes.length === 0) {
@@ -153,11 +153,11 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
               @for (susp of suspensoes; track $index) {
                 <div class="form-grid-3" style="margin-bottom:8px; align-items:end">
                   <div class="form-row" style="margin-bottom:0">
-                    <label style="font-size:.8rem; color:var(--muted)">Suspende</label>
+                    <label style="font-size:.8rem; color:var(--muted)">Suspensa em:</label>
                     <input type="time" [(ngModel)]="susp.hora_suspensao" [name]="'susp_' + $index" step="60">
                   </div>
                   <div class="form-row" style="margin-bottom:0">
-                    <label style="font-size:.8rem; color:var(--muted)">Reabre</label>
+                    <label style="font-size:.8rem; color:var(--muted)">Reaberta em:</label>
                     <input type="time" [(ngModel)]="susp.hora_reabertura" [name]="'reab_' + $index" step="60">
                   </div>
                   <button type="button" class="btn-outline" style="height:38px; padding:0 12px; font-size:.8rem" (click)="removeSuspensao($index)">Remover</button>
@@ -176,11 +176,14 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             </div>
             <div class="form-row">
               <label>Horário da Pauta @if (editData()?.['horario_pauta_editado']) { <span class="badge-edited">editado</span> }</label>
-              <input type="time" [(ngModel)]="horarioPauta" name="horario_pauta" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
+              <input type="time" [(ngModel)]="horarioPauta" name="horario_pauta" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()" (change)="validarHoraInicio()">
             </div>
             <div class="form-row">
               <label>Início do evento <span class="req">*</span> @if (editData()?.['horario_inicio_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()" (change)="onHoraInicioChange()">
+              @if (erroHoraInicio) {
+                <p class="erro-hora-entrada">{{ erroHoraInicio }}</p>
+              }
             </div>
             <div class="form-row">
               <label>Evento Encerrado</label>
@@ -196,20 +199,31 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             <div class="form-row">
               <label [class.label-sm]="editData()?.['horario_termino_editado']">Término do evento @if (eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['horario_termino_editado']) { <span class="badge-edited badge-edited-sm">editado</span> }</label>
               <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled() || !eventoEncerrado" [readonly]="isRO()" [class.field-ro]="isRO() || !eventoEncerrado" (change)="onHoraFimChange()">
+              @if (erroHoraFim) {
+                <p class="erro-hora-entrada">{{ erroHoraFim }}</p>
+              }
             </div>
             <div class="form-row">
               <label>Início da operação @if (sessaoAberta() && !editMode()) { <span class="req">*</span> } @if (editData()?.['hora_entrada_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaEntrada" name="hora_entrada" step="60"
                      [disabled]="formDisabled()"
                      [readonly]="isRO() || horaEntradaReadonly()"
-                     [class.field-ro]="isRO() || horaEntradaReadonly()">
+                     [class.field-ro]="isRO() || horaEntradaReadonly()"
+                     (change)="onHoraEntradaChange()">
+              @if (erroHoraEntrada) {
+                <p class="erro-hora-entrada">{{ erroHoraEntrada }}</p>
+              }
             </div>
             <div class="form-row">
               <label>Término da operação @if (!eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['hora_saida_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaSaida" name="hora_saida" step="60"
                      [disabled]="formDisabled() || eventoEncerrado"
                      [readonly]="isRO()"
-                     [class.field-ro]="isRO() || eventoEncerrado">
+                     [class.field-ro]="isRO() || eventoEncerrado"
+                     (change)="validarHoraSaida()">
+              @if (erroHoraSaida) {
+                <p class="erro-hora-entrada">{{ erroHoraSaida }}</p>
+              }
             </div>
           </div>
           }
@@ -345,6 +359,10 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
       &:hover { background: #f8fafc; }
       input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
     }
+    .erro-hora-entrada {
+      color: var(--color-red, #dc2626); font-size: .8rem; margin: 4px 0 0;
+      font-weight: 500; line-height: 1.4;
+    }
   `],
 })
 export class OperacaoFormComponent implements OnInit {
@@ -393,6 +411,10 @@ export class OperacaoFormComponent implements OnInit {
   observacoes = '';
   houveAnormalidade = 'nao';
   eventoEncerrado = true;
+  erroHoraEntrada = '';
+  erroHoraInicio = '';
+  erroHoraFim = '';
+  erroHoraSaida = '';
 
   // ── Multi-operador (Plenário Principal) ──
   isMultiOperador = false;
@@ -693,6 +715,10 @@ export class OperacaoFormComponent implements OnInit {
     this.horaFim = '';
     this.horaEntrada = '';
     this.horaSaida = '';
+    this.erroHoraEntrada = '';
+    this.erroHoraInicio = '';
+    this.erroHoraFim = '';
+    this.erroHoraSaida = '';
     this.usb01 = '';
     this.usb02 = '';
     this.observacoes = '';
@@ -730,21 +756,78 @@ export class OperacaoFormComponent implements OnInit {
 
   // ═══ SINCRONIZAÇÃO DE HORÁRIOS ═══
 
+  onHoraEntradaChange(): void {
+    this.erroHoraEntrada = '';
+    if (this.isMultiOperador || !this.horaEntrada) return;
+
+    // Buscar entrada anterior (ordem imediatamente anterior)
+    const entradas: any[] = this.estadoSessao?.entradas_sessao || [];
+    if (!entradas.length) return;
+
+    // Calcular a ordem que terá esta entrada
+    const ordemAtual = this.editandoEntradaSeq
+      ? (this.estadoSessao?.entradas_operador?.find((e: any) => e.seq === this.editandoEntradaSeq)?.ordem ?? 0)
+      : entradas.length + 1;
+    if (ordemAtual < 2) return;
+
+    const anterior = entradas.find((e: any) => e.ordem === ordemAtual - 1);
+    if (!anterior) return;
+
+    const horaSaidaAnt = (anterior.hora_saida || '').substring(0, 5);
+    if (!horaSaidaAnt) return;
+
+    const heNorm = this.horaEntrada.substring(0, 5);
+    if (heNorm < horaSaidaAnt) {
+      const nome = anterior.operador_nome || 'anterior';
+      this.erroHoraEntrada = `O horário de entrada não pode ser anterior ao horário de saída do operador anterior. O operador ${nome} registrou saída às ${horaSaidaAnt}.`;
+    }
+  }
+
   onHoraInicioChange(): void {
     if (this.horaEntradaReadonly()) {
       this.horaEntrada = this.horaInicio;
     }
+    this.validarHoraInicio();
+    this.validarHoraFim();
+    this.validarHoraSaida();
   }
 
   onHoraFimChange(): void {
     if (this.eventoEncerrado) {
       this.horaSaida = this.horaFim;
     }
+    this.validarHoraFim();
   }
 
   onEventoEncerradoChange(): void {
     this.horaFim = '';
     this.horaSaida = '';
+    this.erroHoraFim = '';
+    this.erroHoraSaida = '';
+  }
+
+  validarHoraInicio(): void {
+    this.erroHoraInicio = '';
+    if (!this.horaInicio || !this.horarioPauta || this.isMultiOperador) return;
+    if (this.horaInicio.substring(0, 5) < this.horarioPauta.substring(0, 5)) {
+      this.erroHoraInicio = `O início do evento não pode ser anterior ao horário da pauta (${this.horarioPauta.substring(0, 5)}).`;
+    }
+  }
+
+  validarHoraFim(): void {
+    this.erroHoraFim = '';
+    if (!this.horaFim || !this.horaInicio || !this.eventoEncerrado || this.isMultiOperador) return;
+    if (this.horaFim.substring(0, 5) <= this.horaInicio.substring(0, 5)) {
+      this.erroHoraFim = `O término do evento deve ser posterior ao início do evento (${this.horaInicio.substring(0, 5)}).`;
+    }
+  }
+
+  validarHoraSaida(): void {
+    this.erroHoraSaida = '';
+    if (!this.horaSaida || !this.horaInicio || this.eventoEncerrado || this.isMultiOperador) return;
+    if (this.horaSaida.substring(0, 5) <= this.horaInicio.substring(0, 5)) {
+      this.erroHoraSaida = `O término da operação deve ser posterior ao início do evento (${this.horaInicio.substring(0, 5)}).`;
+    }
   }
 
   private aplicarRegraHorarios(): void {
@@ -779,6 +862,10 @@ export class OperacaoFormComponent implements OnInit {
       if (this.eventoEncerrado && !this.horaFim) { this.focusFirst('hora_fim'); return; }
       if (!this.eventoEncerrado && !this.horaSaida) { this.focusFirst('hora_saida'); return; }
       if (this.sessaoAberta() && !this.editMode() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
+      if (this.erroHoraEntrada) { this.focusFirst('hora_entrada'); return; }
+      if (this.erroHoraInicio) { this.focusFirst('hora_inicio'); return; }
+      if (this.erroHoraFim) { this.focusFirst('hora_fim'); return; }
+      if (this.erroHoraSaida) { this.focusFirst('hora_saida'); return; }
     }
 
     if (this.editMode()) {
@@ -902,8 +989,8 @@ export class OperacaoFormComponent implements OnInit {
       horario_pauta: this.isMultiOperador ? null : (this.horarioPauta || null),
       hora_inicio: this.horaInicio,
       hora_fim: this.isMultiOperador ? this.horaFim : (this.eventoEncerrado ? this.horaFim : null),
-      hora_entrada: this.isMultiOperador ? null : (this.horaEntrada || null),
-      hora_saida: this.isMultiOperador ? null : (this.horaSaida || null),
+      hora_entrada: this.isMultiOperador ? (this.horaInicio || null) : (this.horaEntrada || null),
+      hora_saida: this.isMultiOperador ? (this.horaFim || null) : (this.horaSaida || null),
       usb_01: this.usb01 || null,
       usb_02: this.usb02 || null,
       observacoes: this.observacoes || null,

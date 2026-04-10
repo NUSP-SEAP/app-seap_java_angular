@@ -45,10 +45,10 @@ interface EditItem {
             </div>
             <div class="form-row">
               <label>Local</label>
-              @if (readOnly() || editIsMultiOperador) {
+              @if (readOnly() || editSalaTravada) {
                 <div class="field-value">{{ getSalaNome() }}</div>
               } @else {
-                <select [(ngModel)]="salaId" style="width:100%">
+                <select [(ngModel)]="salaId" (ngModelChange)="onEditSalaChange()" style="width:100%">
                   @for (s of lookup.salas(); track s.id) {
                     <option [value]="s.id">{{ s.nome }}</option>
                   }
@@ -387,6 +387,7 @@ export class ChecklistWizardComponent implements OnInit {
 
   // ── Multi-operador no modo edição ──
   editIsMultiOperador = false;
+  editSalaTravada = false; // trava após salvar como Plenário Principal
   editCabineNomes: string[] = [];
   editPlenarioNomes: string[] = [];
 
@@ -537,14 +538,20 @@ export class ChecklistWizardComponent implements OnInit {
         }));
         this.editItems.set(items);
 
-        // Multi-operador
+        // Multi-operador: baseado no estado SALVO no banco
         this.editIsMultiOperador = d['multi_operador'] === true;
+        this.editSalaTravada = this.editIsMultiOperador; // trava se já é Plenário Principal
         if (this.editIsMultiOperador) {
           this.editCabineNomes = d['operadores_cabine'] || [];
           this.editPlenarioNomes = d['operadores_plenario'] || [];
           this.selectedCabine = (d['operadores_cabine_ids'] || []).map(String);
           this.selectedPlenario = (d['operadores_plenario_ids'] || []).map(String);
           this.lookup.loadOperadoresPlenario();
+        } else {
+          this.editCabineNomes = [];
+          this.editPlenarioNomes = [];
+          this.selectedCabine = [];
+          this.selectedPlenario = [];
         }
 
         this.readOnly.set(true);
@@ -562,6 +569,50 @@ export class ChecklistWizardComponent implements OnInit {
   }
 
   enterEditMode(): void { this.readOnly.set(false); }
+
+  onEditSalaChange(): void {
+    if (!this.salaId) return;
+
+    // Detectar multi-operador da nova sala
+    const sala = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    this.editIsMultiOperador = sala?.multi_operador === true;
+
+    if (this.editIsMultiOperador) {
+      this.lookup.loadOperadoresPlenario();
+      if (this.selectedCabine.length === 0 && this.selectedPlenario.length === 0) {
+        this.selectedCabine = [];
+        this.selectedPlenario = [];
+      }
+    } else {
+      this.selectedCabine = [];
+      this.selectedPlenario = [];
+    }
+
+    // Carregar itens da nova sala e reconciliar com respostas existentes
+    this.api.get<any>('/api/forms/checklist/itens-tipo', { sala_id: this.salaId }).subscribe(res => {
+      const novosItens: { id: number; nome: string; tipo_widget: string }[] = res.data || [];
+      const existentes = this.editItems();
+      const existenteMap = new Map(existentes.map(e => [e.item_tipo_id, e]));
+
+      const reconciliados: EditItem[] = novosItens.map(ni => {
+        const prev = existenteMap.get(ni.id);
+        if (prev) {
+          return { ...prev, item_nome: ni.nome, tipo_widget: ni.tipo_widget };
+        }
+        return {
+          item_tipo_id: ni.id,
+          item_nome: ni.nome,
+          tipo_widget: ni.tipo_widget,
+          status: '',
+          descricao_falha: '',
+          valor_texto: '',
+          editado: false,
+        };
+      });
+
+      this.editItems.set(reconciliados);
+    });
+  }
 
   getSalaNome(): string {
     const sala = this.lookup.salas().find(s => String(s.id) === this.salaId);
@@ -692,6 +743,17 @@ export class ChecklistWizardComponent implements OnInit {
   }
 
   prevStep(): void {
+    // Salvar resposta do item atual antes de voltar (mesmo comportamento do nextStep)
+    const item = this.currentItem();
+    if (item) {
+      this.respostas[item.id] = {
+        item_tipo_id: item.id,
+        status: item.tipo_widget === 'text' ? 'Ok' : (this.radioValue || null),
+        descricao_falha: this.radioValue === 'Falha' ? this.falhaDesc.trim() : null,
+        valor_texto: item.tipo_widget === 'text' ? this.textValue.trim() : null,
+      };
+    }
+
     if (this.currentIndex() > 0) {
       this.currentIndex.update(i => i - 1);
       this.loadCurrentItem();

@@ -295,12 +295,32 @@ public class ChecklistService {
         cl.setAtualizadoPor(userId);
         checklistRepo.save(cl);
 
-        // Atualizar respostas com detecção de mudança
+        // Coletar IDs dos itens enviados pelo frontend (itens da nova sala)
+        Set<Integer> itensTipoEnviados = new HashSet<>();
+        for (Map<String, Object> item : itens) {
+            Integer tid = resolveItemTipoId(item, Map.of());
+            if (tid == null) {
+                Object idRaw = item.get("item_tipo_id");
+                if (idRaw != null) try { tid = Integer.parseInt(idRaw.toString()); } catch (Exception e) {}
+            }
+            if (tid != null) itensTipoEnviados.add(tid);
+        }
+
+        // Deletar respostas de itens que não pertencem à nova sala
+        if (!itensTipoEnviados.isEmpty()) {
+            entityManager.createNativeQuery("""
+                    DELETE FROM FRM_CHECKLIST_RESPOSTA
+                    WHERE CHECKLIST_ID = :cid AND ITEM_TIPO_ID NOT IN (:ids)
+                    """).setParameter("cid", checklistId)
+                    .setParameter("ids", itensTipoEnviados)
+                    .executeUpdate();
+        }
+
+        // Atualizar ou criar respostas
         int totalAtualizado = 0;
         for (Map<String, Object> item : itens) {
             Integer tipoId = resolveItemTipoId(item, Map.of());
             if (tipoId == null) {
-                // Tenta pelo nome
                 Object idRaw = item.get("item_tipo_id");
                 if (idRaw != null) {
                     try { tipoId = Integer.parseInt(idRaw.toString()); } catch (Exception e) { continue; }
@@ -331,12 +351,30 @@ public class ChecklistService {
                 resp.setAtualizadoPor(userId);
                 respostaRepo.save(resp);
                 totalAtualizado++;
+            } else {
+                // Item novo (sala mudou) — criar resposta
+                ChecklistResposta resp = new ChecklistResposta();
+                resp.setChecklistId(checklistId);
+                resp.setItemTipoId(tipoId);
+                resp.setStatus(StatusResposta.fromValor(status));
+                resp.setDescricaoFalha(descFalha);
+                resp.setValorTexto(valorTextoNull);
+                resp.setEditado(true);
+                resp.setCriadoPor(userId);
+                resp.setAtualizadoPor(userId);
+                respostaRepo.save(resp);
+                totalAtualizado++;
             }
         }
 
         // Atualizar operadores da junction table (Plenário Principal)
         Sala sala = salaRepo.findById(salaId).orElse(null);
-        if (sala != null && Boolean.TRUE.equals(sala.getMultiOperador())) {
+        boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
+        if (!isMultiOp) {
+            // Sala não é multi-operador: limpar operadores antigos
+            checklistOperadorRepo.deleteByChecklistId(checklistId);
+        }
+        if (isMultiOp) {
             @SuppressWarnings("unchecked")
             List<String> cabineOps = body.get("operadores_cabine") instanceof List
                     ? (List<String>) body.get("operadores_cabine") : null;

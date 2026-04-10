@@ -60,7 +60,7 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
             @if (asArray(d()!['suspensoes']).length > 0) {
               @for (s of asArray(d()!['suspensoes']); track $index) {
                 <div class="field-value" style="margin-bottom:4px">
-                  Suspende: {{ s['hora_suspensao'] }} &mdash; Reabre: {{ s['hora_reabertura'] }}
+                  Suspensa em: {{ s['hora_suspensao'] }} &mdash; Reaberta em: {{ s['hora_reabertura'] }}
                 </div>
               }
             } @else {
