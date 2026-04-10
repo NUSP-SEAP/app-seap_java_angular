@@ -22,8 +22,8 @@ docker compose up -d
 
 Na **primeira execução**, o Oracle inicializa automaticamente:
 1. Cria o usuário NUSP (via `APP_USER` do `.env`)
-2. Cria as 17 tabelas (via `oracle-init/01-schema.sql`)
-3. Insere dados iniciais — salas, comissões e usuários de teste (via `oracle-init/02-seed-data.sql`)
+2. Cria as 19 tabelas (via `oracle-init/01-schema.sql`)
+3. Insere dados iniciais (via `oracle-init/02-seed-data.sql`): salas, comissões, itens de checklist, configurações de sala e usuários de teste
 
 O backend pode reiniciar algumas vezes enquanto o Oracle inicializa (~1-2 minutos). Isso é normal.
 
