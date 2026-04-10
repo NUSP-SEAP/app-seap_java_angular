@@ -51,8 +51,8 @@ interface TableState extends ListParams {
             <tr>
               <th><app-column-filter [col]="chkCols[0]" [distinctValues]="gd(chkMeta(),'sala')" [currentSort]="chkState.sort" [currentDir]="chkState.direction" (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" /></th>
               <th><app-column-filter [col]="chkCols[1]" [distinctValues]="gd(chkMeta(),'data')" [currentSort]="chkState.sort" [currentDir]="chkState.direction" (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" /></th>
-              <th style="text-align:center">Qtde. OK</th>
-              <th style="text-align:center">Qtde. Falha</th>
+              <th style="text-align:center"><span class="sort-header" (click)="onChkSort({sort:'qtde_ok', direction: chkState.sort==='qtde_ok' && chkState.direction==='asc' ? 'desc' : 'asc'})">Qtde. OK <span class="sort-arrow">{{ chkState.sort==='qtde_ok' ? (chkState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
+              <th style="text-align:center"><span class="sort-header" (click)="onChkSort({sort:'qtde_falha', direction: chkState.sort==='qtde_falha' && chkState.direction==='asc' ? 'desc' : 'asc'})">Qtde. Falha <span class="sort-arrow">{{ chkState.sort==='qtde_falha' ? (chkState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
               <th>Ação</th>
             </tr>
           </thead>
@@ -94,9 +94,9 @@ interface TableState extends ListParams {
             <tr>
               <th><app-column-filter [col]="opCols[0]" [distinctValues]="gd(opMeta(),'sala')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
               <th><app-column-filter [col]="opCols[1]" [distinctValues]="gd(opMeta(),'data')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
-              <th style="text-align:center">Início Operação</th>
-              <th style="text-align:center">Fim Operação</th>
-              <th style="text-align:center">Anormalidade?</th>
+              <th style="text-align:center"><span class="sort-header" (click)="onOpSort({sort:'hora_entrada', direction: opState.sort==='hora_entrada' && opState.direction==='asc' ? 'desc' : 'asc'})">Início Operação <span class="sort-arrow">{{ opState.sort==='hora_entrada' ? (opState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
+              <th style="text-align:center"><span class="sort-header" (click)="onOpSort({sort:'hora_saida', direction: opState.sort==='hora_saida' && opState.direction==='asc' ? 'desc' : 'asc'})">Fim Operação <span class="sort-arrow">{{ opState.sort==='hora_saida' ? (opState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
+              <th style="text-align:center"><app-column-filter [col]="opCols[2]" [distinctValues]="gd(opMeta(),'anormalidade')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
               <th>Ação</th>
             </tr>
           </thead>
@@ -164,6 +164,11 @@ interface TableState extends ListParams {
       strong { color: var(--muted); }
     }
     section { margin-bottom: 32px; }
+    .sort-header {
+      cursor: pointer; user-select: none; white-space: nowrap;
+      &:hover { color: var(--primary); }
+    }
+    .sort-arrow { font-size: .7rem; }
     .btn-anom-sim {
       background: #fef2f2;
       border-color: #fca5a5;
@@ -185,6 +190,7 @@ export class HomeComponent implements OnInit {
   opCols: ColumnFilterDef[] = [
     { key: 'sala', label: 'Sala', type: 'text' },
     { key: 'data', label: 'Data', type: 'date' },
+    { key: 'anormalidade', label: 'Anormalidade?', type: 'text' },
   ];
 
   // ── Checklists state ──
@@ -241,9 +247,12 @@ export class HomeComponent implements OnInit {
   }
 
   gerarRelatorioChecklists(): void {
-    this.api.openPdfInline('/api/operador/meus-checklists/relatorio', {
+    const params: Record<string, string> = {
       sort: this.chkState.sort, direction: this.chkState.direction,
-    });
+    };
+    const filters = buildFilters(this.chkFilters);
+    if (Object.keys(filters).length) params['filters'] = JSON.stringify(filters);
+    this.api.openPdfInline('/api/operador/meus-checklists/relatorio', params);
   }
 
   // ── Operações ──
@@ -278,9 +287,12 @@ export class HomeComponent implements OnInit {
   }
 
   gerarRelatorioOperacoes(): void {
-    this.api.openPdfInline('/api/operador/minhas-operacoes/relatorio', {
+    const params: Record<string, string> = {
       sort: this.opState.sort, direction: this.opState.direction,
-    });
+    };
+    const filters = buildFilters(this.opFilters);
+    if (Object.keys(filters).length) params['filters'] = JSON.stringify(filters);
+    this.api.openPdfInline('/api/operador/minhas-operacoes/relatorio', params);
   }
 
   openAnormalidade(op: Record<string, unknown>): void {

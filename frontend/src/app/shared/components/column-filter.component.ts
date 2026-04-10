@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, signal, computed, HostListener, ElementRef, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, signal, computed, HostListener, ElementRef, inject, AfterViewChecked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 export interface ColumnFilterDef {
@@ -25,7 +25,8 @@ export interface ColumnFilterState {
     </span>
 
     @if (open()) {
-      <div class="filter-panel" (click)="$event.stopPropagation()">
+      <div class="filter-panel" [style.top.px]="panelTop" [style.left.px]="panelLeft"
+           (click)="$event.stopPropagation()">
         <div class="filter-header">
           <strong>{{ col.label }}</strong>
           <button class="btn-close-filter" (click)="close()">&times;</button>
@@ -57,21 +58,21 @@ export interface ColumnFilterState {
         @if (distinctItems().length > 0) {
           <div class="filter-section">
             <span class="section-title">Filtrar valores</span>
-            <input type="text" class="filter-search" [(ngModel)]="searchText"
-                   placeholder="Buscar..." (input)="0">
+            <input type="text" class="filter-search" [value]="searchText()"
+                   (input)="searchText.set($any($event.target).value)" placeholder="Buscar...">
           </div>
 
           <!-- Checkboxes -->
           <div class="filter-values">
-            <label class="filter-check">
-              <input type="checkbox" [checked]="allSelected()" (change)="toggleAll()">
+            <div class="filter-check" (click)="toggleAll()">
+              <input type="checkbox" [checked]="allSelected()" tabindex="-1">
               <span>(Selecionar tudo)</span>
-            </label>
+            </div>
             @for (item of filteredItems(); track item.value) {
-              <label class="filter-check">
-                <input type="checkbox" [checked]="isSelected(item.value)" (change)="toggleValue(item.value)">
+              <div class="filter-check" (click)="toggleValue(item.value)">
+                <input type="checkbox" [checked]="isSelected(item.value)" tabindex="-1">
                 <span>{{ item.label || item.value || '(vazio)' }}</span>
-              </label>
+              </div>
             }
           </div>
         }
@@ -92,10 +93,10 @@ export interface ColumnFilterState {
     .filter-icon { font-size: .7rem; }
     .filter-active { color: var(--primary); font-weight: 700; }
     .filter-panel {
-      position: absolute; top: 100%; left: 0; z-index: 9999;
-      background: #fff; border: 1px solid var(--border); border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 12px;
-      min-width: 260px; max-width: 340px; margin-top: 4px;
+      position: fixed; z-index: 9999;
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15); padding: 12px;
+      min-width: 280px; max-width: 340px; max-height: 420px; overflow: auto;
     }
     .filter-header {
       display: flex; justify-content: space-between; align-items: center;
@@ -130,7 +131,7 @@ export interface ColumnFilterState {
       padding: 3px 4px; font-size: .8rem; cursor: pointer;
       border-radius: 3px;
       &:hover { background: var(--row-hover); }
-      input { margin: 0; cursor: pointer; }
+      input { margin: 0; pointer-events: none; }
       span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     }
     .filter-actions {
@@ -143,7 +144,7 @@ export interface ColumnFilterState {
     }
   `],
 })
-export class ColumnFilterComponent {
+export class ColumnFilterComponent implements AfterViewChecked {
   private el = inject(ElementRef);
 
   @Input() col!: ColumnFilterDef;
@@ -154,18 +155,22 @@ export class ColumnFilterComponent {
   @Output() filterChange = new EventEmitter<{ key: string; state: ColumnFilterState | null }>();
 
   open = signal(false);
-  searchText = '';
+  searchText = signal('');
   dateFrom = '';
   dateTo = '';
+  panelTop = 0;
+  panelLeft = 0;
   private selectedValues = signal<string[] | null>(null); // null = all
+  private needsPosition = false;
 
   distinctItems = computed(() => this.distinctValues || []);
 
   filteredItems = computed(() => {
     const items = this.distinctItems();
-    if (!this.searchText) return items;
-    const q = this.searchText.toLowerCase();
-    return items.filter(i => (i.label || i.value || '').toLowerCase().includes(q));
+    const q = this.searchText();
+    if (!q) return items;
+    const lower = q.toLowerCase();
+    return items.filter(i => (i.label || i.value || '').toLowerCase().includes(lower));
   });
 
   allSelected = computed(() => this.selectedValues() === null);
@@ -181,10 +186,48 @@ export class ColumnFilterComponent {
 
   toggle(e: Event): void {
     e.stopPropagation();
-    this.open.set(!this.open());
+    const willOpen = !this.open();
+    this.open.set(willOpen);
+    if (willOpen) this.needsPosition = true;
   }
 
   close(): void { this.open.set(false); }
+
+  ngAfterViewChecked(): void {
+    if (this.needsPosition && this.open()) {
+      this.needsPosition = false;
+      this.positionPanel();
+    }
+  }
+
+  private positionPanel(): void {
+    const trigger = this.el.nativeElement.querySelector('.filter-trigger') as HTMLElement;
+    const panel = this.el.nativeElement.querySelector('.filter-panel') as HTMLElement;
+    if (!trigger || !panel) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const margin = 8;
+
+    // Tentar abrir abaixo, alinhado à direita do trigger
+    let top = rect.bottom + 6;
+    let left = rect.right - panelRect.width;
+
+    // Ajuste horizontal: manter dentro da viewport
+    if (left < margin) left = margin;
+    const maxLeft = window.innerWidth - panelRect.width - margin;
+    if (left > maxLeft) left = Math.max(margin, maxLeft);
+
+    // Ajuste vertical: se não cabe abaixo, abrir acima
+    const maxTop = window.innerHeight - panelRect.height - margin;
+    if (top > maxTop) {
+      top = rect.top - panelRect.height - 6;
+    }
+    if (top < margin) top = margin;
+
+    this.panelTop = top;
+    this.panelLeft = left;
+  }
 
   @HostListener('document:click', ['$event'])
   onDocClick(e: Event): void {
@@ -210,15 +253,17 @@ export class ColumnFilterComponent {
   toggleValue(value: string): void {
     let sel = this.selectedValues();
     if (sel === null) {
-      // Was "all" — now uncheck one: select all except this one
-      sel = this.distinctItems().map(i => i.value).filter(v => v !== value);
+      // Estado "todos selecionados" — clicar em um seleciona APENAS esse
+      sel = [value];
     } else if (sel.includes(value)) {
       sel = sel.filter(v => v !== value);
+      // Se ficou vazio, voltar para "todos" para evitar tabela vazia
+      if (sel.length === 0) { sel = null as any; }
     } else {
       sel = [...sel, value];
     }
-    // If all selected, reset to null
-    if (sel.length >= this.distinctItems().length) {
+    // Se todos selecionados, resetar para null
+    if (sel && sel.length >= this.distinctItems().length) {
       this.selectedValues.set(null);
     } else {
       this.selectedValues.set(sel);
@@ -234,7 +279,7 @@ export class ColumnFilterComponent {
     this.selectedValues.set(null);
     this.dateFrom = '';
     this.dateTo = '';
-    this.searchText = '';
+    this.searchText.set('');
     this.emitFilter();
     this.close();
   }

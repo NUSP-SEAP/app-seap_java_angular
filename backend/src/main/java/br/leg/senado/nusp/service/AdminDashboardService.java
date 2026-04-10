@@ -56,7 +56,7 @@ public class AdminDashboardService {
                 "c.DATA_OPERACAO", CL_SORT, List.of("s.NOME", "o.NOME_COMPLETO"),
                 Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME", "turno", "c.TURNO", "nome", "o.NOME_COMPLETO"),
                 Map.of("data", "date", "sala", "text", "turno", "text", "nome", "text"),
-                page, limit, search, sort, dir, periodo, filters);
+                page, limit, search, sort, dir, periodo, filters, "c.ID DESC");
     }
 
     @SuppressWarnings("unchecked")
@@ -150,7 +150,7 @@ public class AdminDashboardService {
                 "r.DATA", OP_SESS_SORT, List.of("s.NOME", "ult.NOME_EVENTO", "c.NOME"),
                 Map.of("data", "r.DATA", "sala", "s.NOME"),
                 Map.of("data", "date", "sala", "text"),
-                page, limit, search, sort, dir, periodo, filters);
+                page, limit, search, sort, dir, periodo, filters, "r.ID DESC");
     }
 
     // ══ Operações (entradas) ══════════════════════════════════
@@ -353,7 +353,7 @@ public class AdminDashboardService {
                 fromJoins, "a.DATA", ANOM_SORT, List.of("s.NOME", "a.NOME_EVENTO", "o.NOME_COMPLETO"),
                 Map.of("data", "a.DATA", "sala", "s.NOME", "nome_evento", "a.NOME_EVENTO"),
                 Map.of("data", "date", "sala", "text", "nome_evento", "text"),
-                page, limit, search, sort, dir, periodo, filters);
+                page, limit, search, sort, dir, periodo, filters, "a.ID DESC");
     }
 
     @SuppressWarnings("unchecked")

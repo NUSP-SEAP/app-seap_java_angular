@@ -45,7 +45,8 @@ public class OperadorDashboardController {
         body.put("ok", true);
         body.put("data", result.data());
         body.put("meta", Map.of("page", page, "limit", limit,
-                "total", result.total(), "pages", (result.total() + limit - 1) / limit));
+                "total", result.total(), "pages", (result.total() + limit - 1) / limit,
+                "distinct", result.distinct()));
         return ResponseEntity.ok(body);
     }
 

@@ -24,18 +24,37 @@ public class DashboardQueryHelper {
             EntityManager em,
             String selectCols,
             String fromJoins,
+            String dateCol,
+            Map<String, String> validSortCols,
+            List<String> searchCols,
+            Map<String, String> colMap,
+            Map<String, String> colTypes,
+            int page, int limit, String search, String sort, String direction,
+            Map<String, Object> periodo, Map<String, Object> filters) {
+        return executePagedQuery(em, selectCols, fromJoins, dateCol, validSortCols,
+                searchCols, colMap, colTypes, page, limit, search, sort, direction, periodo, filters, null);
+    }
+
+    public static PagedResult executePagedQuery(
+            EntityManager em,
+            String selectCols,
+            String fromJoins,
             String dateCol,            // coluna de data para filtro de período (ex: "c.DATA_OPERACAO")
             Map<String, String> validSortCols,   // key=param → value=SQL coluna
             List<String> searchCols,   // colunas para busca textual (UPPER LIKE)
             Map<String, String> colMap,           // key=nome front → value=SQL expr (para filtros/distinct)
             Map<String, String> colTypes,         // key=nome front → value=tipo (text/date/bool/number)
             int page, int limit, String search, String sort, String direction,
-            Map<String, Object> periodo, Map<String, Object> filters) {
+            Map<String, Object> periodo, Map<String, Object> filters,
+            String tiebreaker) {       // coluna secundária de desempate (ex: "c.ID DESC")
 
         int offset = (page - 1) * limit;
 
         // ── WHERE (busca textual) ──
-        StringBuilder where = new StringBuilder();
+        // Se fromJoins já contém WHERE (ex: filtro de operador), appendCondition
+        // deve usar AND. Truque: inicializar where não-vazio para forçar o branch AND.
+        boolean fromHasWhere = fromJoins.toUpperCase().contains(" WHERE ");
+        StringBuilder where = new StringBuilder(fromHasWhere ? " " : "");
         List<Object> params = new ArrayList<>();
 
         if (search != null && !search.isBlank()) {
@@ -45,7 +64,7 @@ public class DashboardQueryHelper {
                 ors.add("UPPER(" + col + ") LIKE ?");
                 params.add(term);
             }
-            if (!ors.isEmpty()) where.append("WHERE (").append(String.join(" OR ", ors)).append(")");
+            if (!ors.isEmpty()) appendCondition(where, String.join(" OR ", ors));
         }
 
         // ── WHERE (período) ──
@@ -58,6 +77,9 @@ public class DashboardQueryHelper {
         String orderCol = validSortCols.getOrDefault(sort != null ? sort : "", validSortCols.values().iterator().next());
         String dir = "desc".equalsIgnoreCase(direction) ? "DESC" : "ASC";
         String orderBy = "ORDER BY " + orderCol + " " + dir;
+        if (tiebreaker != null && !tiebreaker.isBlank()) {
+            orderBy += ", " + tiebreaker;
+        }
 
         // ── COUNT ──
         String countSql = "SELECT COUNT(*) " + fromJoins + " " + where;
@@ -100,7 +122,13 @@ public class DashboardQueryHelper {
         for (Map.Entry<String, String> entry : colMap.entrySet()) {
             String key = entry.getKey();
             String expr = entry.getValue();
-            String distSql = "SELECT DISTINCT (" + expr + ") AS V " + fromJoins + " " + where + " ORDER BY V ASC";
+            String type = colTypes.getOrDefault(key, "text");
+            // Datas: extrair apenas a parte da data (TRUNC) formatada, ordenar DESC
+            String selectExpr = "date".equals(type)
+                    ? "DISTINCT TRUNC(" + expr + ")"
+                    : "DISTINCT (" + expr + ")";
+            String orderDir = "date".equals(type) ? "DESC" : "ASC";
+            String distSql = "SELECT " + selectExpr + " AS V " + fromJoins + " " + where + " ORDER BY V " + orderDir;
             try {
                 Query distQ = em.createNativeQuery(distSql);
                 setParams(distQ, params);
@@ -111,8 +139,14 @@ public class DashboardQueryHelper {
                     if (v == null) continue;
                     String value = v.toString();
                     String label = value;
-                    String type = colTypes.getOrDefault(key, "text");
-                    if ("bool".equals(type)) {
+                    if ("date".equals(type)) {
+                        // Converter para yyyy-MM-dd (value) e dd/MM/yyyy (label)
+                        String raw = value.split(" ")[0]; // "2026-03-03 00:00:00.0" → "2026-03-03"
+                        value = raw;
+                        String[] parts = raw.split("-");
+                        if (parts.length == 3) label = parts[2] + "/" + parts[1] + "/" + parts[0];
+                        else label = raw;
+                    } else if ("bool".equals(type)) {
                         boolean b = "1".equals(value) || "true".equalsIgnoreCase(value);
                         value = b ? "true" : "false";
                         label = b ? "Sim" : "Não";
@@ -164,9 +198,7 @@ public class DashboardQueryHelper {
             }
         }
         if (parts.isEmpty()) return;
-        String condition = "(" + String.join(" OR ", parts) + ")";
-        if (where.isEmpty()) where.append("WHERE ").append(condition);
-        else where.append(" AND ").append(condition);
+        appendCondition(where, String.join(" OR ", parts));
     }
 
     private static void appendColumnFilters(StringBuilder where, List<Object> params,
@@ -196,13 +228,43 @@ public class DashboardQueryHelper {
                 params.add("%" + text.toUpperCase() + "%");
             }
 
+            // range filter (date from/to)
+            if ("date".equals(colType) && spec.get("range") instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> range = (Map<String, Object>) spec.get("range");
+                String from = range.get("from") != null ? range.get("from").toString().strip() : "";
+                String to = range.get("to") != null ? range.get("to").toString().strip() : "";
+                if (!from.isEmpty()) {
+                    appendCondition(where, "TRUNC(" + colSql + ") >= TO_DATE(?, 'YYYY-MM-DD')");
+                    params.add(from);
+                }
+                if (!to.isEmpty()) {
+                    appendCondition(where, "TRUNC(" + colSql + ") <= TO_DATE(?, 'YYYY-MM-DD')");
+                    params.add(to);
+                }
+            }
+
             // values filter (IN)
             @SuppressWarnings("unchecked")
             List<Object> values = (List<Object>) spec.get("values");
             if (values != null && !values.isEmpty()) {
-                String placeholders = String.join(",", values.stream().map(v -> "?").toList());
-                appendCondition(where, colSql + " IN (" + placeholders + ")");
-                params.addAll(values);
+                if ("date".equals(colType)) {
+                    String placeholders = String.join(",", values.stream()
+                            .map(v -> "TO_DATE(?, 'YYYY-MM-DD')").toList());
+                    appendCondition(where, "TRUNC(" + colSql + ") IN (" + placeholders + ")");
+                    params.addAll(values);
+                } else if ("bool".equals(colType)) {
+                    // Converter "true"/"false" para 1/0 (Oracle NUMBER(1))
+                    String placeholders = String.join(",", values.stream().map(v -> "?").toList());
+                    appendCondition(where, colSql + " IN (" + placeholders + ")");
+                    for (Object v : values) {
+                        params.add("true".equalsIgnoreCase(v.toString()) ? 1 : 0);
+                    }
+                } else {
+                    String placeholders = String.join(",", values.stream().map(v -> "?").toList());
+                    appendCondition(where, colSql + " IN (" + placeholders + ")");
+                    params.addAll(values);
+                }
             }
         }
     }
@@ -210,6 +272,8 @@ public class DashboardQueryHelper {
     private static void appendCondition(StringBuilder where, String condition) {
         if (where.isEmpty()) where.append("WHERE (").append(condition).append(")");
         else where.append(" AND (").append(condition).append(")");
+        // Nota: quando fromJoins já contém WHERE, 'where' é inicializado com " "
+        // (não-vazio), forçando o branch AND — que é concatenado à SQL existente.
     }
 
     private static void setParams(Query q, List<Object> params) {

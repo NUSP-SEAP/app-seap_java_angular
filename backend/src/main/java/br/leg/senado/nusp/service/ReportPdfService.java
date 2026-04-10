@@ -47,7 +47,7 @@ public class ReportPdfService {
                 COLS_ANORMALIDADES,
                 (tbl, r, nf) -> {
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
-                    tbl.addCell(cell(str(r, "sala"), nf, false));
+                    tbl.addCell(cell(str(r, "sala_nome"), nf, false));
                     tbl.addCell(cell(str(r, "registrado_por"), nf, false));
                     tbl.addCell(cell(str(r, "descricao"), nf, false));
                     tbl.addCell(boolCell(bool(r, "solucionada"), nf, COLOR_GREEN, COLOR_RED));
@@ -61,7 +61,7 @@ public class ReportPdfService {
                 new String[]{"Local", "Data", "Operador", "Tipo", "Evento", "Pauta", "Início", "Fim", "Anormalidade?"},
                 COLS_OPERACOES_ENTRADAS,
                 (tbl, r, nf) -> {
-                    tbl.addCell(cell(str(r, "sala"), nf, true));
+                    tbl.addCell(cell(str(r, "sala_nome"), nf, true));
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
                     tbl.addCell(cell(str(r, "operador"), nf, false));
                     tbl.addCell(cell(str(r, "tipo"), nf, false));
@@ -93,11 +93,11 @@ public class ReportPdfService {
                 new String[]{"Sala", "Data", "Início Operação", "Fim Operação", "Anormalidade?"},
                 COLS_MINHAS_OPERACOES,
                 (tbl, r, nf) -> {
-                    tbl.addCell(cell(str(r, "sala"), nf, true));
+                    tbl.addCell(cell(str(r, "sala_nome"), nf, true));
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
-                    tbl.addCell(centerCell(fmtTime(r.get("inicio_operacao")), nf));
-                    tbl.addCell(centerCell(fmtTime(r.get("fim_operacao")), nf));
-                    boolean anom = bool(r, "anormalidade");
+                    tbl.addCell(centerCell(fmtTime(r.get("hora_entrada")), nf));
+                    tbl.addCell(centerCell(fmtTime(r.get("hora_saida")), nf));
+                    boolean anom = bool(r, "houve_anormalidade");
                     tbl.addCell(boolCell(anom, nf, anom ? COLOR_RED : COLOR_GREEN, anom ? COLOR_RED : COLOR_GREEN));
                 }, 9f, 11f);
     }

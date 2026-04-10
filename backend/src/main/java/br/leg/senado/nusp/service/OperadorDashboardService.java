@@ -22,8 +22,16 @@ public class OperadorDashboardService {
 
     // ══ Meus Checklists ═══════════════════════════════════════
 
+    private static final String QTDE_OK_EXPR =
+            "(SELECT COUNT(*) FROM FRM_CHECKLIST_RESPOSTA r JOIN FRM_CHECKLIST_ITEM_TIPO t ON t.ID = r.ITEM_TIPO_ID " +
+            "WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Ok' AND t.TIPO_WIDGET != 'text')";
+    private static final String QTDE_FALHA_EXPR =
+            "(SELECT COUNT(*) FROM FRM_CHECKLIST_RESPOSTA r JOIN FRM_CHECKLIST_ITEM_TIPO t ON t.ID = r.ITEM_TIPO_ID " +
+            "WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha' AND t.TIPO_WIDGET != 'text')";
+
     private static final Map<String, String> MC_SORT = new LinkedHashMap<>() {{
         put("data", "c.DATA_OPERACAO"); put("sala", "s.NOME");
+        put("qtde_ok", QTDE_OK_EXPR); put("qtde_falha", QTDE_FALHA_EXPR);
     }};
 
     public PagedResult listMeusChecklists(String userId, int page, int limit,
@@ -40,7 +48,7 @@ public class OperadorDashboardService {
                 "c.DATA_OPERACAO", MC_SORT, List.of("s.NOME"),
                 Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME"),
                 Map.of("data", "date", "sala", "text"),
-                page, limit, null, sort, dir, null, filters);
+                page, limit, null, sort, dir, null, filters, "c.ID DESC");
     }
 
     @SuppressWarnings("unchecked")
@@ -139,6 +147,8 @@ public class OperadorDashboardService {
 
     private static final Map<String, String> MO_SORT = new LinkedHashMap<>() {{
         put("data", "r.DATA"); put("sala", "s.NOME");
+        put("hora_entrada", "e.HORA_ENTRADA"); put("hora_saida", "e.HORA_SAIDA");
+        put("anormalidade", "e.HOUVE_ANORMALIDADE");
     }};
 
     public PagedResult listMinhasOperacoes(String userId, int page, int limit,
@@ -153,9 +163,9 @@ public class OperadorDashboardService {
                 "LEFT JOIN OPR_ANORMALIDADE a ON a.ENTRADA_ID = e.ID " +
                 "WHERE (e.OPERADOR_ID = '" + userId + "' OR EXISTS (SELECT 1 FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = e.ID AND eo.OPERADOR_ID = '" + userId + "'))",
                 "r.DATA", MO_SORT, List.of("s.NOME", "e.NOME_EVENTO"),
-                Map.of("data", "r.DATA", "sala", "s.NOME"),
-                Map.of("data", "date", "sala", "text"),
-                page, limit, null, sort, dir, null, filters);
+                Map.of("data", "r.DATA", "sala", "s.NOME", "anormalidade", "e.HOUVE_ANORMALIDADE"),
+                Map.of("data", "date", "sala", "text", "anormalidade", "bool"),
+                page, limit, null, sort, dir, null, filters, "e.ID DESC");
     }
 
     @SuppressWarnings("unchecked")
