@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { LookupService } from '../../core/services/lookup.service';
+import { ToastService } from '../../shared/components/toast.component';
 
 @Component({
   selector: 'app-anormalidade-form',
@@ -168,6 +169,7 @@ export class AnormalidadeFormComponent implements OnInit {
   private api = inject(ApiService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private toast = inject(ToastService);
   lookup = inject(LookupService);
 
   loading = signal(true);
@@ -308,15 +310,15 @@ export class AnormalidadeFormComponent implements OnInit {
       next: (res: any) => {
         this.saving.set(false);
         if (res.ok) {
-          alert('Registro de anormalidade salvo com sucesso!');
+          this.toast.success('Registro de anormalidade salvo com sucesso!');
           this.router.navigate(['/home']);
         } else {
-          alert('Erro: ' + (res.error || 'Erro desconhecido'));
+          this.toast.error(res.error || 'Erro desconhecido');
         }
       },
       error: (err) => {
         this.saving.set(false);
-        alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão'));
+        this.toast.error('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão'));
       },
     });
   }

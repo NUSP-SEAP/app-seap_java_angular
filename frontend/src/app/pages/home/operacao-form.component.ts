@@ -4,6 +4,7 @@ import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { LookupService } from '../../core/services/lookup.service';
+import { ToastService } from '../../shared/components/toast.component';
 import { MultiSelectDropdownComponent, MultiSelectOption } from '../../shared/components/multi-select-dropdown.component';
 
 type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas_entradas';
@@ -16,14 +17,9 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
     <div class="card-custom" style="max-width:800px; margin:0 auto">
 
       <!-- Info sessão (acima do título, como no original) -->
-      @if (!editMode() && !loading() && (sessaoAberta() || editandoEntradaSeq)) {
+      @if (!editMode() && !loading() && sessaoAberta()) {
         <div class="sessao-header-row">
-          @if (sessaoAberta()) {
-            <div class="sessao-operadores" [innerHTML]="infoOperadoresSessao()"></div>
-          }
-          @if (editandoEntradaSeq) {
-            <div class="sessao-modo-edicao">Editando {{ editandoEntradaSeq }}º Registro</div>
-          }
+          <div class="sessao-operadores" [innerHTML]="infoOperadoresSessao()"></div>
         </div>
       }
 
@@ -52,7 +48,7 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             @if (editMode()) {
               <input [value]="salaNome" readonly disabled style="width:100%" class="field-ro">
             } @else {
-              <select [(ngModel)]="salaId" name="sala_id" (ngModelChange)="onSalaChange()" [disabled]="!!editandoEntradaSeq" style="width:100%">
+              <select [(ngModel)]="salaId" name="sala_id" (ngModelChange)="onSalaChange()" style="width:100%">
                 <option value="">Selecione...</option>
                 @for (s of lookup.salas(); track s.id) {
                   <option [value]="s.id">{{ s.nome }}</option>
@@ -93,7 +89,7 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           @if (showComissao() && !isMultiOperador) {
             <div class="form-row">
               <label>Atividade Legislativa <span class="req">*</span> @if (editData()?.['comissao_editado']) { <span class="badge-edited">editado</span> }</label>
-              @if (isRO()) {
+              @if (isRO() || camposSessaoReadonly()) {
                 <div class="field-value">{{ comissaoNome || '-' }}</div>
               } @else {
                 <select [(ngModel)]="comissaoId" name="comissao_id" [disabled]="formDisabled() || comissaoTravada" style="width:100%">
@@ -109,14 +105,14 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           <!-- Descrição do Evento -->
           <div class="form-row">
             <label>Descrição do Evento <span class="req">*</span> @if (editData()?.['nome_evento_editado']) { <span class="badge-edited">editado</span> }</label>
-            <input [(ngModel)]="nomeEvento" name="nome_evento" placeholder="Ex.: 37ª reunião..." [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
+            <input [(ngModel)]="nomeEvento" name="nome_evento" placeholder="Ex.: 37ª reunião..." [disabled]="formDisabled()" [readonly]="isRO() || camposSessaoReadonly()" [class.field-ro]="isRO() || camposSessaoReadonly()">
           </div>
 
           <!-- Responsável pelo Evento (não exibido no Plenário Principal) -->
           @if (!isMultiOperador) {
           <div class="form-row">
             <label>Responsável pelo Evento <span class="req">*</span> @if (editData()?.['responsavel_evento_editado']) { <span class="badge-edited">editado</span> }</label>
-            <input [(ngModel)]="responsavelEvento" name="responsavel_evento" placeholder="Ex.: Secretário da Reunião ou da Mesa" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
+            <input [(ngModel)]="responsavelEvento" name="responsavel_evento" placeholder="Ex.: Secretário da Reunião ou da Mesa" [disabled]="formDisabled()" [readonly]="isRO() || camposSessaoReadonly()" [class.field-ro]="isRO() || camposSessaoReadonly()">
           </div>
           }
 
@@ -168,43 +164,25 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           </div>
           } @else {
 
-          <!-- Plenários Numerados: Data + Pauta + Início + Evento Encerrado -->
+          <!-- Plenários Numerados: Data + Pauta + Início evento + Início operação -->
           <div class="form-grid-4">
             <div class="form-row">
               <label>Data <span class="req">*</span></label>
-              <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()" [readonly]="isRO() || editMode()" [class.field-ro]="isRO() || editMode()">
+              <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()" [readonly]="isRO() || editMode() || camposSessaoReadonly()" [class.field-ro]="isRO() || editMode() || camposSessaoReadonly()">
             </div>
             <div class="form-row">
               <label>Horário da Pauta @if (editData()?.['horario_pauta_editado']) { <span class="badge-edited">editado</span> }</label>
-              <input type="time" [(ngModel)]="horarioPauta" name="horario_pauta" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()" (change)="validarHoraInicio()">
+              <input type="time" [(ngModel)]="horarioPauta" name="horario_pauta" step="60" [disabled]="formDisabled()" [readonly]="isRO() || camposSessaoReadonly()" [class.field-ro]="isRO() || camposSessaoReadonly()" (change)="revalidarTodosHorarios()">
             </div>
             <div class="form-row">
               <label>Início do evento <span class="req">*</span> @if (editData()?.['horario_inicio_editado']) { <span class="badge-edited">editado</span> }</label>
-              <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()" (change)="onHoraInicioChange()">
+              <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO() || camposSessaoReadonly()" [class.field-ro]="isRO() || camposSessaoReadonly()" (change)="onHoraInicioChange()">
               @if (erroHoraInicio) {
                 <p class="erro-hora-entrada">{{ erroHoraInicio }}</p>
               }
             </div>
             <div class="form-row">
-              <label>Evento Encerrado</label>
-              <div class="radio-row">
-                <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="true" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Sim</label>
-                <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="false" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Não</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Término do evento + Início Operação + Término Operação -->
-          <div class="form-grid-3">
-            <div class="form-row">
-              <label [class.label-sm]="editData()?.['horario_termino_editado']">Término do evento @if (eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['horario_termino_editado']) { <span class="badge-edited badge-edited-sm">editado</span> }</label>
-              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled() || !eventoEncerrado" [readonly]="isRO()" [class.field-ro]="isRO() || !eventoEncerrado" (change)="onHoraFimChange()">
-              @if (erroHoraFim) {
-                <p class="erro-hora-entrada">{{ erroHoraFim }}</p>
-              }
-            </div>
-            <div class="form-row">
-              <label>Início da operação @if (sessaoAberta() && !editMode()) { <span class="req">*</span> } @if (editData()?.['hora_entrada_editado']) { <span class="badge-edited">editado</span> }</label>
+              <label>Início da operação @if (!horaEntradaReadonly()) { <span class="req">*</span> } @if (editData()?.['hora_entrada_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaEntrada" name="hora_entrada" step="60"
                      [disabled]="formDisabled()"
                      [readonly]="isRO() || horaEntradaReadonly()"
@@ -214,13 +192,31 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
                 <p class="erro-hora-entrada">{{ erroHoraEntrada }}</p>
               }
             </div>
+          </div>
+
+          <!-- Evento Encerrado + Término do evento + Término da operação -->
+          <div class="form-grid-3">
+            <div class="form-row">
+              <label>Evento Encerrado</label>
+              <div class="radio-row">
+                <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="true" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Sim</label>
+                <label><input type="radio" [(ngModel)]="eventoEncerrado" name="evento_encerrado" [value]="false" [disabled]="formDisabled() || editMode()" (ngModelChange)="onEventoEncerradoChange()"> Não</label>
+              </div>
+            </div>
+            <div class="form-row">
+              <label [class.label-sm]="editData()?.['horario_termino_editado']">Término do evento @if (eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['horario_termino_editado']) { <span class="badge-edited badge-edited-sm">editado</span> }</label>
+              <input type="time" [(ngModel)]="horaFim" name="hora_fim" step="60" [disabled]="formDisabled() || !eventoEncerrado" [readonly]="isRO()" [class.field-ro]="isRO() || !eventoEncerrado" (change)="onHoraFimChange()">
+              @if (erroHoraFim) {
+                <p class="erro-hora-entrada">{{ erroHoraFim }}</p>
+              }
+            </div>
             <div class="form-row">
               <label>Término da operação @if (!eventoEncerrado) { <span class="req">*</span> } @if (editData()?.['hora_saida_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaSaida" name="hora_saida" step="60"
                      [disabled]="formDisabled() || eventoEncerrado"
                      [readonly]="isRO()"
                      [class.field-ro]="isRO() || eventoEncerrado"
-                     (change)="validarHoraSaida()">
+                     (change)="revalidarTodosHorarios()">
               @if (erroHoraSaida) {
                 <p class="erro-hora-entrada">{{ erroHoraSaida }}</p>
               }
@@ -280,22 +276,9 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             } @else {
               <div class="actions-left">
                 <a routerLink="/home" class="btn-secondary-custom">&larr; Voltar</a>
-                @if (situacao() === 'uma_entrada' && entradaAberta1) {
-                  <!-- não mostra botão editar se entrada está em aberto -->
-                } @else if (situacao() === 'uma_entrada' || situacao() === 'duas_entradas') {
-                  <button type="button" class="btn-outline" (click)="editarEntrada(1)">Editar 1º Registro</button>
-                }
-                @if (situacao() === 'duas_entradas') {
-                  <button type="button" class="btn-outline" (click)="editarEntrada(2)">Editar 2º Registro</button>
-                }
               </div>
               <div class="actions-right">
-                @if (editandoEntradaSeq) {
-                  <button type="button" class="btn-secondary-custom" (click)="cancelarEdicao()">Cancelar</button>
-                  <button type="submit" class="btn-primary-custom" [disabled]="saving()">
-                    {{ saving() ? 'Salvando...' : 'Salvar Edição' }}
-                  </button>
-                } @else if (situacao() !== 'duas_entradas') {
+                @if (situacao() !== 'duas_entradas') {
                   <button type="submit" class="btn-primary-custom" [disabled]="saving() || formDisabled()">
                     {{ saving() ? 'Salvando...' : btnSalvarLabel() }}
                   </button>
@@ -370,6 +353,7 @@ export class OperacaoFormComponent implements OnInit {
   private auth = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private toast = inject(ToastService);
   lookup = inject(LookupService);
 
   loading = signal(true);
@@ -392,7 +376,6 @@ export class OperacaoFormComponent implements OnInit {
   private estadoSessao: any = null;
   private isPrimeiroOp = false;
   comissaoTravada = false;
-  editandoEntradaSeq: number | null = null;
   entradaAberta1 = false;
 
   // ── Campos do formulário ──
@@ -514,6 +497,12 @@ export class OperacaoFormComponent implements OnInit {
     return this.situacao() === 'inicial' || this.situacao() === 'duas_entradas';
   }
 
+  /** Campos da sessão (data, pauta, início, evento, comissão, responsável) são readonly para operadores que não são o primeiro */
+  camposSessaoReadonly(): boolean {
+    if (this.editMode()) return this.editData()?.['ordem'] !== 1;
+    return this.sessaoAberta();
+  }
+
   horaEntradaReadonly(): boolean {
     if (this.editMode()) return this.editData()?.['ordem'] === 1;
     return !this.sessaoAberta(); // 1º operador: readonly, espelha hora_inicio
@@ -582,7 +571,7 @@ export class OperacaoFormComponent implements OnInit {
         this.readOnly.set(true);
         this.loading.set(false);
       },
-      error: () => { this.loading.set(false); alert('Erro ao carregar operação.'); },
+      error: () => { this.loading.set(false); this.toast.error('Erro ao carregar operação.'); },
     });
   }
 
@@ -656,6 +645,8 @@ export class OperacaoFormComponent implements OnInit {
         // Travar comissão se sessão aberta e já tem valor
         if (sessaoAberta && data.comissao_id && this.showComissao()) {
           this.comissaoId = String(data.comissao_id);
+          const c = this.lookup.comissoes().find(x => String(x.id) === this.comissaoId);
+          if (c) this.comissaoNome = c.nome;
           this.comissaoTravada = true;
         }
 
@@ -677,7 +668,11 @@ export class OperacaoFormComponent implements OnInit {
       this.responsavelEvento = data.responsavel_evento || '';
       this.horarioPauta = this.extractTime(data.horario_pauta);
       this.horaInicio = this.extractTime(data.horario_inicio);
-      if (data.comissao_id) this.comissaoId = String(data.comissao_id);
+      if (data.comissao_id) {
+        this.comissaoId = String(data.comissao_id);
+        const c = this.lookup.comissoes().find(x => String(x.id) === this.comissaoId);
+        if (c) this.comissaoNome = c.nome;
+      }
     }
     // Limpar campos pessoais do operador
     this.horaEntrada = '';
@@ -696,7 +691,11 @@ export class OperacaoFormComponent implements OnInit {
     this.responsavelEvento = e.responsavel_evento || '';
     this.horarioPauta = this.extractTime(e.horario_pauta);
     this.horaInicio = this.extractTime(e.horario_inicio || e.hora_inicio);
-    if (e.comissao_id) this.comissaoId = String(e.comissao_id);
+    if (e.comissao_id) {
+      this.comissaoId = String(e.comissao_id);
+      const c = this.lookup.comissoes().find(x => String(x.id) === this.comissaoId);
+      if (c) this.comissaoNome = c.nome;
+    }
     this.horaEntrada = this.extractTime(e.hora_entrada);
     this.horaFim = '';
     this.horaSaida = '';
@@ -727,47 +726,47 @@ export class OperacaoFormComponent implements OnInit {
     this.eventoEncerrado = true;
   }
 
-  // ═══ EDIÇÃO DE ENTRADAS (1ª/2ª) ═══
-
-  editarEntrada(seq: number): void {
-    const entradas: any[] = this.estadoSessao?.entradas_operador || [];
-    const entrada = entradas.find((e: any) => e.seq === seq);
-    if (!entrada) { alert('Entrada não encontrada.'); return; }
-
-    this.editandoEntradaSeq = seq;
-    this.preencherComEntrada(entrada);
-    this.horaFim = this.extractTime(entrada.horario_termino);
-    this.horaSaida = this.extractTime(entrada.hora_saida);
-    this.horaEntrada = this.extractTime(entrada.hora_entrada);
-    this.usb01 = entrada.usb_01 || '';
-    this.usb02 = entrada.usb_02 || '';
-    this.observacoes = entrada.observacoes || '';
-    this.houveAnormalidade = entrada.houve_anormalidade ? 'sim' : 'nao';
-    this.originalAnormalidade = entrada.houve_anormalidade || false;
-    this.eventoEncerrado = !!entrada.horario_termino;
-    this.aplicarRegraHorarios();
-  }
-
-  cancelarEdicao(): void {
-    this.editandoEntradaSeq = null;
-    this.originalAnormalidade = false;
-    this.onSalaChange(); // recarrega estado
-  }
-
   // ═══ SINCRONIZAÇÃO DE HORÁRIOS ═══
 
+  revalidarTodosHorarios(): void {
+    this.validarHoraInicio();
+    this.validarHoraEntrada();
+    this.validarHoraFim();
+    this.validarHoraSaida();
+  }
+
   onHoraEntradaChange(): void {
+    this.revalidarTodosHorarios();
+  }
+
+  onHoraInicioChange(): void {
+    if (this.horaEntradaReadonly()) {
+      this.horaEntrada = this.horaInicio;
+    }
+    this.revalidarTodosHorarios();
+  }
+
+  onHoraFimChange(): void {
+    if (this.eventoEncerrado) {
+      this.horaSaida = this.horaFim;
+    }
+    this.revalidarTodosHorarios();
+  }
+
+  onEventoEncerradoChange(): void {
+    this.horaFim = '';
+    this.horaSaida = '';
+    this.revalidarTodosHorarios();
+  }
+
+  validarHoraEntrada(): void {
     this.erroHoraEntrada = '';
     if (this.isMultiOperador || !this.horaEntrada) return;
 
-    // Buscar entrada anterior (ordem imediatamente anterior)
     const entradas: any[] = this.estadoSessao?.entradas_sessao || [];
     if (!entradas.length) return;
 
-    // Calcular a ordem que terá esta entrada
-    const ordemAtual = this.editandoEntradaSeq
-      ? (this.estadoSessao?.entradas_operador?.find((e: any) => e.seq === this.editandoEntradaSeq)?.ordem ?? 0)
-      : entradas.length + 1;
+    const ordemAtual = entradas.length + 1;
     if (ordemAtual < 2) return;
 
     const anterior = entradas.find((e: any) => e.ordem === ordemAtual - 1);
@@ -779,56 +778,71 @@ export class OperacaoFormComponent implements OnInit {
     const heNorm = this.horaEntrada.substring(0, 5);
     if (heNorm < horaSaidaAnt) {
       const nome = anterior.operador_nome || 'anterior';
-      this.erroHoraEntrada = `O horário de entrada não pode ser anterior ao horário de saída do operador anterior. O operador ${nome} registrou saída às ${horaSaidaAnt}.`;
+      this.erroHoraEntrada = `O horário de início da sua operação deve ser igual ou superior à ${horaSaidaAnt} (término da operação de ${nome})`;
     }
-  }
-
-  onHoraInicioChange(): void {
-    if (this.horaEntradaReadonly()) {
-      this.horaEntrada = this.horaInicio;
-    }
-    this.validarHoraInicio();
-    this.validarHoraFim();
-    this.validarHoraSaida();
-  }
-
-  onHoraFimChange(): void {
-    if (this.eventoEncerrado) {
-      this.horaSaida = this.horaFim;
-    }
-    this.validarHoraFim();
-  }
-
-  onEventoEncerradoChange(): void {
-    this.horaFim = '';
-    this.horaSaida = '';
-    this.erroHoraFim = '';
-    this.erroHoraSaida = '';
   }
 
   validarHoraInicio(): void {
     this.erroHoraInicio = '';
     if (!this.horaInicio || !this.horarioPauta || this.isMultiOperador) return;
-    if (this.horaInicio.substring(0, 5) < this.horarioPauta.substring(0, 5)) {
-      this.erroHoraInicio = `O início do evento não pode ser anterior ao horário da pauta (${this.horarioPauta.substring(0, 5)}).`;
+    if (this.hm(this.horaInicio) < this.hm(this.horarioPauta)) {
+      this.erroHoraInicio = `O início do evento não pode ser anterior ao horário da pauta (${this.hm(this.horarioPauta)}).`;
     }
   }
 
   validarHoraFim(): void {
     this.erroHoraFim = '';
-    if (!this.horaFim || !this.horaInicio || !this.eventoEncerrado || this.isMultiOperador) return;
-    if (this.horaFim.substring(0, 5) <= this.horaInicio.substring(0, 5)) {
-      this.erroHoraFim = `O término do evento deve ser posterior ao início do evento (${this.horaInicio.substring(0, 5)}).`;
+    if (!this.horaFim || !this.eventoEncerrado || this.isMultiOperador) return;
+    // Término do evento deve ser maior que Início da operação
+    const ref = this.horaEntrada || this.horaInicio;
+    if (ref && this.hm(this.horaFim) <= this.hm(ref)) {
+      this.erroHoraFim = `O término do evento deve ser posterior ao início da operação (${this.hm(ref)}).`;
+      return;
+    }
+    // Quando encerrado, horaSaida = horaFim — validar contra operador seguinte
+    const seg = this.dadosSeguinte();
+    if (seg && this.hm(this.horaFim) > this.hm(seg.hora)) {
+      this.erroHoraFim = `O término do evento não pode ser posterior ao início da operação de ${seg.nome} (${this.hm(seg.hora)}).`;
     }
   }
 
   validarHoraSaida(): void {
     this.erroHoraSaida = '';
-    if (!this.horaSaida || !this.horaInicio || this.eventoEncerrado || this.isMultiOperador) return;
-    if (this.horaSaida.substring(0, 5) <= this.horaInicio.substring(0, 5)) {
-      this.erroHoraSaida = `O término da operação deve ser posterior ao início do evento (${this.horaInicio.substring(0, 5)}).`;
+    if (!this.horaSaida || this.eventoEncerrado || this.isMultiOperador) return;
+    // Término da operação deve ser maior que Início da operação
+    const ref = this.horaEntrada || this.horaInicio;
+    if (ref && this.hm(this.horaSaida) <= this.hm(ref)) {
+      this.erroHoraSaida = `O término da operação deve ser posterior ao início da operação (${this.hm(ref)}).`;
+      return;
+    }
+    // Validar contra operador seguinte
+    const seg = this.dadosSeguinte();
+    if (seg && this.hm(this.horaSaida) > this.hm(seg.hora)) {
+      this.erroHoraSaida = `O término da operação não pode ser posterior ao início da operação de ${seg.nome} (${this.hm(seg.hora)}).`;
     }
   }
+
+  /** Retorna hora_entrada e nome do operador seguinte (se existir) */
+  private dadosSeguinte(): { hora: string; nome: string } | null {
+    // Modo edit standalone: dados vêm do backend
+    if (this.editMode()) {
+      const h = this.editData()?.['hora_entrada_seguinte'];
+      if (h) return { hora: h, nome: this.editData()?.['operador_nome_seguinte'] || 'operador seguinte' };
+      return null;
+    }
+    // Modo novo: dados vêm do estadoSessao
+    const entradas: any[] = this.estadoSessao?.entradas_sessao || [];
+    if (!entradas.length) return null;
+    const ordemAtual = entradas.length + 1;
+    const seguinte = entradas.find((e: any) => e.ordem === ordemAtual + 1);
+    if (!seguinte) return null;
+    const h = (seguinte.hora_entrada || '').substring(0, 5);
+    if (!h) return null;
+    return { hora: h, nome: seguinte.operador_nome || 'operador seguinte' };
+  }
+
+  /** Extrai HH:MM de um valor de horário */
+  private hm(t: string): string { return t.substring(0, 5); }
 
   private aplicarRegraHorarios(): void {
     if (this.horaEntradaReadonly() && this.horaInicio) {
@@ -854,14 +868,14 @@ export class OperacaoFormComponent implements OnInit {
 
     if (this.isMultiOperador) {
       // Validações específicas Plenário Principal
-      if (!this.editMode() && this.selectedOperadorIds.length === 0) { alert('Selecione pelo menos um operador.'); return; }
+      if (!this.editMode() && this.selectedOperadorIds.length === 0) { this.toast.warning('Selecione pelo menos um operador.'); return; }
       if (!this.horaFim && !this.isRO()) { this.focusFirst('hora_fim'); return; }
     } else {
       // Validações plenários numerados
       if (this.showComissao() && !this.comissaoId) { this.focusFirst('comissao_id'); return; }
       if (this.eventoEncerrado && !this.horaFim) { this.focusFirst('hora_fim'); return; }
       if (!this.eventoEncerrado && !this.horaSaida) { this.focusFirst('hora_saida'); return; }
-      if (this.sessaoAberta() && !this.editMode() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
+      if (!this.horaEntradaReadonly() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
       if (this.erroHoraEntrada) { this.focusFirst('hora_entrada'); return; }
       if (this.erroHoraInicio) { this.focusFirst('hora_inicio'); return; }
       if (this.erroHoraFim) { this.focusFirst('hora_fim'); return; }
@@ -870,8 +884,6 @@ export class OperacaoFormComponent implements OnInit {
 
     if (this.editMode()) {
       this.submitEdit();
-    } else if (this.editandoEntradaSeq) {
-      this.submitEditarEntrada();
     } else {
       this.submitNew();
     }
@@ -887,58 +899,24 @@ export class OperacaoFormComponent implements OnInit {
         this.saving.set(false);
         if (res.ok) {
           if (res.houve_anormalidade_nova) {
-            alert('Edição salva com sucesso.\n\nRedirecionando para Registro de Anormalidade.');
+            this.toast.success('Edição salva com sucesso. Redirecionando para Registro de Anormalidade...');
             this.router.navigate(['/anormalidade'], {
               queryParams: { registro_id: res.registro_id, entrada_id: res.entrada_id, modo: 'novo' }
             });
           } else {
-            alert('Registro atualizado com sucesso!');
+            this.toast.success('Registro atualizado com sucesso!');
             this.loadEditData();
           }
         } else {
-          alert('Erro: ' + (res.error || 'Erro desconhecido'));
+          this.toast.error(res.error || 'Erro desconhecido');
         }
       },
-      error: (err) => { this.saving.set(false); alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão')); },
-    });
-  }
-
-  private submitEditarEntrada(): void {
-    this.saving.set(true);
-    const entradas: any[] = this.estadoSessao?.entradas_operador || [];
-    const entrada = entradas.find((e: any) => e.seq === this.editandoEntradaSeq);
-    if (!entrada) { this.saving.set(false); return; }
-
-    const payload = this.buildPayload();
-    payload['entrada_id'] = entrada.entrada_id;
-
-    this.api.post<any>('/api/operacao/audio/salvar-entrada', payload).subscribe({
-      next: (res: any) => {
-        this.saving.set(false);
-        if (res.ok) {
-          const tipoEfetivo = (res.tipo_evento || payload['tipo_evento'] || '').toLowerCase();
-          const deveAbrirAnom = res.houve_anormalidade && (tipoEfetivo === 'operacao' || tipoEfetivo === 'outros');
-          if (deveAbrirAnom) {
-            alert('Edição salva com sucesso.\n\nRedirecionando para Registro de Anormalidade.');
-            this.router.navigate(['/anormalidade'], {
-              queryParams: { registro_id: res.registro_id, entrada_id: res.entrada_id, modo: 'novo' }
-            });
-          } else {
-            alert('Edição salva com sucesso.');
-            this.editandoEntradaSeq = null;
-            this.originalAnormalidade = false;
-            this.onSalaChange();
-          }
-        } else {
-          alert('Erro: ' + (res.error || 'Erro desconhecido'));
-        }
-      },
-      error: (err) => { this.saving.set(false); alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão')); },
+      error: (err) => { this.saving.set(false); this.toast.error('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão')); },
     });
   }
 
   private submitNew(): void {
-    if (!this.salaId) { alert('Selecione um local.'); return; }
+    if (!this.salaId) { this.toast.warning('Selecione um local.'); return; }
     this.saving.set(true);
 
     const payload = this.buildPayload();
@@ -951,19 +929,19 @@ export class OperacaoFormComponent implements OnInit {
           const tipoEfetivo = (res.tipo_evento || payload['tipo_evento'] || '').toLowerCase();
           const deveAbrirAnom = res.houve_anormalidade && (tipoEfetivo === 'operacao' || tipoEfetivo === 'outros');
           if (deveAbrirAnom) {
-            alert('Registro salvo com sucesso.\n\nRedirecionando para Registro de Anormalidade.');
+            this.toast.success('Registro salvo com sucesso. Redirecionando para Registro de Anormalidade...');
             this.router.navigate(['/anormalidade'], {
               queryParams: { registro_id: res.registro_id, entrada_id: res.entrada_id, modo: 'novo' }
             });
           } else {
-            alert('Registro salvo com sucesso.');
+            this.toast.success('Registro salvo com sucesso.');
             this.router.navigate(['/home']);
           }
         } else {
-          alert('Erro: ' + (res.error || res.message || 'Erro desconhecido'));
+          this.toast.error(res.error || res.message || 'Erro desconhecido');
         }
       },
-      error: (err) => { this.saving.set(false); alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão')); },
+      error: (err) => { this.saving.set(false); this.toast.error('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão')); },
     });
   }
 

@@ -267,6 +267,22 @@ public class OperadorDashboardService {
             result.put("suspensoes", suspList);
         }
 
+        // Dados do operador seguinte (para validação de hora_saida na edição)
+        long ordem = num(r[19]);
+        long registroId = num(r[17]);
+        @SuppressWarnings("unchecked")
+        List<Object[]> nextRows = em.createNativeQuery("""
+                SELECT e2.HORA_ENTRADA, o2.NOME_COMPLETO
+                FROM OPR_REGISTRO_ENTRADA e2
+                JOIN PES_OPERADOR o2 ON o2.ID = e2.OPERADOR_ID
+                WHERE e2.REGISTRO_ID = ?1 AND e2.ORDEM = ?2
+                """).setParameter(1, registroId).setParameter(2, ordem + 1).getResultList();
+        if (!nextRows.isEmpty()) {
+            Object[] nr = nextRows.get(0);
+            result.put("hora_entrada_seguinte", str(nr[0]));
+            result.put("operador_nome_seguinte", str(nr[1]));
+        }
+
         return result;
     }
 

@@ -188,6 +188,125 @@ public class OperacaoService {
         return result;
     }
 
+    // ── Validação centralizada de horários (plenários numerados) ──
+
+    /**
+     * Valida todas as regras de horário para uma entrada de operação (não multi-operador).
+     * Chamado tanto na criação quanto na edição.
+     *
+     * @param horarioPauta  horário da pauta (pode ser null)
+     * @param horaInicio    início do evento (obrigatório)
+     * @param horaEntrada   início da operação (obrigatório para ordem >= 2)
+     * @param horaFim       término do evento (quando encerrado)
+     * @param horaSaida     término da operação (quando não encerrado)
+     * @param ordem         posição do operador na sessão (1 = primeiro)
+     * @param registroId    ID da sessão (para buscar operadores adjacentes)
+     * @param entradaId     ID da entrada sendo editada (0 para criação)
+     */
+    private void validarHorarios(String horarioPauta, String horaInicio,
+                                  String horaEntrada, String horaFim, String horaSaida,
+                                  int ordem, long registroId, long entradaId) {
+        // Regra 1: Início do evento >= Horário da Pauta
+        if (horaInicio != null && horarioPauta != null) {
+            if (hm(horaInicio).compareTo(hm(horarioPauta)) < 0) {
+                throw new ServiceValidationException(
+                    "O início do evento não pode ser anterior ao horário da pauta (" + hm(horarioPauta) + ").");
+            }
+        }
+
+        // Regra 5: hora_entrada obrigatório para ordem >= 2
+        if (ordem >= 2 && (horaEntrada == null || horaEntrada.isBlank())) {
+            throw new ServiceValidationException("O campo 'Início da operação' é obrigatório.");
+        }
+
+        // Referência para validação: usar horaEntrada se disponível, senão horaInicio
+        String ref = (horaEntrada != null && !horaEntrada.isBlank()) ? horaEntrada : horaInicio;
+
+        // Regra 2: Término do evento > Início da operação
+        if (horaFim != null && ref != null) {
+            if (hm(horaFim).compareTo(hm(ref)) <= 0) {
+                throw new ServiceValidationException(
+                    "O término do evento deve ser posterior ao início da operação (" + hm(ref) + ").");
+            }
+        }
+
+        // Regra 2: Término da operação > Início da operação
+        if (horaSaida != null && ref != null) {
+            if (hm(horaSaida).compareTo(hm(ref)) <= 0) {
+                throw new ServiceValidationException(
+                    "O término da operação deve ser posterior ao início da operação (" + hm(ref) + ").");
+            }
+        }
+
+        // Regra 3: Início da operação >= Término da operação do operador anterior
+        if (ordem >= 2 && horaEntrada != null && registroId > 0) {
+            List<?> antResult = entityManager.createNativeQuery(
+                "SELECT e.HORA_SAIDA, o.NOME_COMPLETO FROM OPR_REGISTRO_ENTRADA e " +
+                "JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID " +
+                "WHERE e.REGISTRO_ID = ?1 AND e.ORDEM = ?2")
+                .setParameter(1, registroId).setParameter(2, ordem - 1).getResultList();
+            if (!antResult.isEmpty()) {
+                Object[] ant = (Object[]) antResult.get(0);
+                String hsAnt = ant[0] != null ? ant[0].toString().strip() : null;
+                String nomeAnt = ant[1] != null ? ant[1].toString() : "anterior";
+                if (hsAnt != null && !hsAnt.isBlank() && hm(horaEntrada).compareTo(hm(hsAnt)) < 0) {
+                    throw new ServiceValidationException(
+                        "O horário de início da sua operação deve ser igual ou superior à " +
+                        hm(hsAnt) + " (término da operação de " + nomeAnt + ").");
+                }
+            }
+        }
+
+        // Regra 4: Término da operação <= Início da operação do operador seguinte
+        // (hora_saida ou horaFim quando encerrado)
+        String terminoEfetivo = horaFim != null ? horaFim : horaSaida;
+        if (terminoEfetivo != null && registroId > 0) {
+            List<?> segResult = entityManager.createNativeQuery(
+                "SELECT e.HORA_ENTRADA, o.NOME_COMPLETO FROM OPR_REGISTRO_ENTRADA e " +
+                "JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID " +
+                "WHERE e.REGISTRO_ID = ?1 AND e.ORDEM = ?2")
+                .setParameter(1, registroId).setParameter(2, ordem + 1)
+                .getResultList();
+            if (!segResult.isEmpty()) {
+                Object[] seg = (Object[]) segResult.get(0);
+                String heSeg = seg[0] != null ? seg[0].toString().strip() : null;
+                String nomeSeg = seg[1] != null ? seg[1].toString() : "operador seguinte";
+                if (heSeg != null && !heSeg.isBlank() && hm(terminoEfetivo).compareTo(hm(heSeg)) > 0) {
+                    throw new ServiceValidationException(
+                        "O término da operação não pode ser posterior ao início da operação de " +
+                        nomeSeg + " (" + hm(heSeg) + ").");
+                }
+            }
+        }
+    }
+
+    /**
+     * Propaga os campos compartilhados da sessão (editados pelo operador de ordem 1)
+     * para todas as outras entradas da mesma sessão.
+     * Campos: nome_evento, horario_pauta, horario_inicio, tipo_evento, comissao_id, responsavel_evento.
+     */
+    private void propagarCamposSessao(long registroId, long entradaIdOrigem,
+                                       String nomeEvento, String horarioPauta, String horaInicio,
+                                       String tipoEvento, Long comissaoId, String responsavelEvento) {
+        entityManager.createNativeQuery("""
+                UPDATE OPR_REGISTRO_ENTRADA SET
+                    NOME_EVENTO = :ne, HORARIO_PAUTA = :hp, HORARIO_INICIO = :hi,
+                    TIPO_EVENTO = :te, COMISSAO_ID = :ci, RESPONSAVEL_EVENTO = :re
+                WHERE REGISTRO_ID = :regId AND ID != :entradaId
+                """)
+                .setParameter("ne", nomeEvento).setParameter("hp", horarioPauta)
+                .setParameter("hi", horaInicio).setParameter("te", tipoEvento)
+                .setParameter("ci", comissaoId).setParameter("re", responsavelEvento)
+                .setParameter("regId", registroId).setParameter("entradaId", entradaIdOrigem)
+                .executeUpdate();
+    }
+
+    /** Extrai HH:MM de um valor de horário */
+    private static String hm(String t) {
+        if (t == null || t.length() < 5) return t;
+        return t.substring(0, 5);
+    }
+
     // ── Salvar entrada (criar ou editar) ──────────────────────
 
     /**
@@ -245,9 +364,27 @@ public class OperacaoService {
 
             long registroId = ((Number) estado.get("registro_id")).longValue();
 
+            // Validação completa de horários (plenários numerados)
+            Sala salaInline = salaRepo.findById(salaId).orElse(null);
+            boolean isMultiOpInline = salaInline != null && Boolean.TRUE.equals(salaInline.getMultiOperador());
+            if (!isMultiOpInline) {
+                int ordemInline = ((Number) entradaAtual.get("ordem")).intValue();
+                validarHorarios(horarioPauta, horaInicio, horaEntrada, horaFim, horaSaida,
+                        ordemInline, registroId, entradaId);
+            }
+
             entradaRepo.updateEntradaBasica(entradaId, nomeEvento, horarioPauta, horaInicio, horaFim,
                     tipoEvento, observacoes, usb01, usb02, comissaoId, responsavelEvento,
                     horaEntrada, horaSaida, userId);
+
+            // Propagar campos compartilhados para outros operadores da sessão (se ordem = 1)
+            if (!isMultiOpInline) {
+                int ordemAtual = ((Number) entradaAtual.get("ordem")).intValue();
+                if (ordemAtual == 1) {
+                    propagarCamposSessao(registroId, entradaId, nomeEvento, horarioPauta,
+                            horaInicio, tipoEvento, comissaoId, responsavelEvento);
+                }
+            }
 
             if (horaFim != null) audioRepo.finalizarSessao(registroId, userId);
 
@@ -308,26 +445,12 @@ public class OperacaoService {
         List<Map<String, Object>> todasEntradas = (List<Map<String, Object>>) estado.get("entradas_sessao");
         int ordem = todasEntradas.size() + 1;
 
-        // Validação: hora_entrada do 2º+ operador >= hora_saida do anterior
+        // Validação completa de horários (plenários numerados)
         Sala sala = salaRepo.findById(salaId).orElse(null);
         boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
-        if (!isMultiOp && ordem >= 2 && horaEntrada != null) {
-            Map<String, Object> entradaAnterior = todasEntradas.stream()
-                    .filter(e -> ((Number) e.get("ordem")).intValue() == ordem - 1)
-                    .findFirst().orElse(null);
-            if (entradaAnterior != null) {
-                String horaSaidaAnterior = (String) entradaAnterior.get("hora_saida");
-                if (horaSaidaAnterior != null && !horaSaidaAnterior.isBlank()) {
-                    String heNorm = horaEntrada.substring(0, 5);
-                    String hsNorm = horaSaidaAnterior.substring(0, 5);
-                    if (heNorm.compareTo(hsNorm) < 0) {
-                        String nomeAnterior = (String) entradaAnterior.get("operador_nome");
-                        throw new ServiceValidationException(
-                            "O horário de entrada não pode ser anterior ao horário de saída do operador anterior. " +
-                            "O operador " + nomeAnterior + " registrou saída às " + hsNorm + ".");
-                    }
-                }
-            }
+        if (!isMultiOp) {
+            validarHorarios(horarioPauta, horaInicio, horaEntrada, horaFim, horaSaida,
+                    ordem, registroId, 0);
         }
 
         RegistroOperacaoOperador entrada = new RegistroOperacaoOperador();
@@ -459,33 +582,14 @@ public class OperacaoService {
 
         Long registroId = entradaRepo.findRegistroIdByEntradaId(entradaId).orElse(0L);
 
-        // Validação: hora_entrada do 2º+ operador >= hora_saida do anterior
-        if (!isMultiOp && horaEntrada != null && registroId > 0) {
+        // Validação completa de horários (plenários numerados)
+        if (!isMultiOp && registroId > 0) {
             List<?> ordemResult = entityManager.createNativeQuery(
                 "SELECT ORDEM FROM OPR_REGISTRO_ENTRADA WHERE ID = ?1")
                 .setParameter(1, entradaId).getResultList();
             int ordemAtual = !ordemResult.isEmpty() ? ((Number) ordemResult.get(0)).intValue() : 1;
-            if (ordemAtual >= 2) {
-                List<?> anteriorResult = entityManager.createNativeQuery(
-                    "SELECT e.HORA_SAIDA, o.NOME_EXIBICAO FROM OPR_REGISTRO_ENTRADA e " +
-                    "JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID " +
-                    "WHERE e.REGISTRO_ID = ?1 AND e.ORDEM = ?2")
-                    .setParameter(1, registroId).setParameter(2, ordemAtual - 1).getResultList();
-                if (!anteriorResult.isEmpty()) {
-                    Object[] ant = (Object[]) anteriorResult.get(0);
-                    String horaSaidaAnt = ant[0] != null ? ant[0].toString().strip() : null;
-                    String nomeAnt = ant[1] != null ? ant[1].toString() : "anterior";
-                    if (horaSaidaAnt != null && !horaSaidaAnt.isBlank()) {
-                        String heNorm = horaEntrada.substring(0, 5);
-                        String hsNorm = horaSaidaAnt.length() >= 5 ? horaSaidaAnt.substring(0, 5) : horaSaidaAnt;
-                        if (heNorm.compareTo(hsNorm) < 0) {
-                            throw new ServiceValidationException(
-                                "O horário de entrada não pode ser anterior ao horário de saída do operador anterior. " +
-                                "O operador " + nomeAnt + " registrou saída às " + hsNorm + ".");
-                        }
-                    }
-                }
-            }
+            validarHorarios(horarioPauta, horaInicio, horaEntrada, horarioTermino, horaSaida,
+                    ordemAtual, registroId, entradaId);
         }
 
         // Snapshot para histórico
@@ -573,6 +677,18 @@ public class OperacaoService {
                 .setParameter("hs2", horaSaida).setParameter("userId", userId)
                 .setParameter("entradaId", entradaId)
                 .executeUpdate();
+
+        // Propagar campos compartilhados para outros operadores da sessão (se ordem = 1)
+        if (!isMultiOp && registroId > 0) {
+            List<?> ordemCheck = entityManager.createNativeQuery(
+                "SELECT ORDEM FROM OPR_REGISTRO_ENTRADA WHERE ID = ?1")
+                .setParameter(1, entradaId).getResultList();
+            int ordemEdit = !ordemCheck.isEmpty() ? ((Number) ordemCheck.get(0)).intValue() : 1;
+            if (ordemEdit == 1) {
+                propagarCamposSessao(registroId, entradaId, nomeEvento, horarioPauta,
+                        horaInicio, tipoEvento, comissaoId, responsavelEvento);
+            }
+        }
 
         // Atualizar sala se permitido
         if (novoSalaId != null) {

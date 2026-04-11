@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, signal, computed, HostListener, ElementRef, inject, AfterViewChecked } from '@angular/core';
+import { Component, EventEmitter, Input, Output, signal, computed, HostListener, ElementRef, ChangeDetectorRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 export interface ColumnFilterDef {
@@ -144,8 +144,9 @@ export interface ColumnFilterState {
     }
   `],
 })
-export class ColumnFilterComponent implements AfterViewChecked {
+export class ColumnFilterComponent {
   private el = inject(ElementRef);
+  private cdr = inject(ChangeDetectorRef);
 
   @Input() col!: ColumnFilterDef;
   @Input() distinctValues: { value: string; label: string }[] = [];
@@ -158,8 +159,8 @@ export class ColumnFilterComponent implements AfterViewChecked {
   searchText = signal('');
   dateFrom = '';
   dateTo = '';
-  panelTop = 0;
-  panelLeft = 0;
+  panelTop = -9999;
+  panelLeft = -9999;
   private selectedValues = signal<string[] | null>(null); // null = all
   private needsPosition = false;
 
@@ -187,18 +188,18 @@ export class ColumnFilterComponent implements AfterViewChecked {
   toggle(e: Event): void {
     e.stopPropagation();
     const willOpen = !this.open();
+    if (willOpen) {
+      this.panelTop = -9999;
+      this.panelLeft = -9999;
+    }
     this.open.set(willOpen);
-    if (willOpen) this.needsPosition = true;
+    if (willOpen) {
+      // Aguardar dois frames para o painel ter dimensões reais no DOM
+      requestAnimationFrame(() => requestAnimationFrame(() => this.positionPanel()));
+    }
   }
 
   close(): void { this.open.set(false); }
-
-  ngAfterViewChecked(): void {
-    if (this.needsPosition && this.open()) {
-      this.needsPosition = false;
-      this.positionPanel();
-    }
-  }
 
   private positionPanel(): void {
     const trigger = this.el.nativeElement.querySelector('.filter-trigger') as HTMLElement;
@@ -227,6 +228,7 @@ export class ColumnFilterComponent implements AfterViewChecked {
 
     this.panelTop = top;
     this.panelLeft = left;
+    this.cdr.detectChanges();
   }
 
   @HostListener('document:click', ['$event'])

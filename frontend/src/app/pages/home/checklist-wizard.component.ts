@@ -4,6 +4,7 @@ import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { LookupService } from '../../core/services/lookup.service';
+import { ToastService } from '../../shared/components/toast.component';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { MultiSelectDropdownComponent, MultiSelectOption } from '../../shared/components/multi-select-dropdown.component';
 
@@ -351,6 +352,7 @@ export class ChecklistWizardComponent implements OnInit {
   private auth = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private toast = inject(ToastService);
   lookup = inject(LookupService);
 
   // ── Modo ──
@@ -559,7 +561,7 @@ export class ChecklistWizardComponent implements OnInit {
       },
       error: () => {
         this.editLoading.set(false);
-        alert('Erro ao carregar checklist.');
+        this.toast.error('Erro ao carregar checklist.');
       },
     });
   }
@@ -654,15 +656,15 @@ export class ChecklistWizardComponent implements OnInit {
       next: (res: any) => {
         this.saving.set(false);
         if (res.ok) {
-          alert('Checklist atualizado com sucesso!');
+          this.toast.success('Checklist atualizado com sucesso!');
           this.loadEditData(); // recarrega dados atualizados
         } else {
-          alert('Erro: ' + (res.error || 'Erro desconhecido'));
+          this.toast.error(res.error || 'Erro desconhecido');
         }
       },
       error: (err) => {
         this.saving.set(false);
-        alert('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão'));
+        this.toast.error('Erro ao salvar: ' + (err.error?.error || 'Erro de conexão'));
       },
     });
   }
@@ -691,7 +693,7 @@ export class ChecklistWizardComponent implements OnInit {
 
     this.api.get<any>('/api/forms/checklist/itens-tipo', { sala_id: this.salaId }).subscribe(res => {
       const items = res.data || [];
-      if (items.length === 0) { alert('Este local não possui itens de verificação configurados.'); return; }
+      if (items.length === 0) { this.toast.warning('Este local não possui itens de verificação configurados.'); return; }
       this.itens.set(items);
       this.currentIndex.set(0);
       if (!this.startTime) this.startTime = new Date();
@@ -781,7 +783,7 @@ export class ChecklistWizardComponent implements OnInit {
         if (!resp || !resp.status) faltantes.push(item.nome);
       }
       if (faltantes.length > 0) {
-        alert('Itens sem marcação:\n\n' + faltantes.map(n => '• ' + n).join('\n'));
+        this.toast.warning('Itens sem marcação: ' + faltantes.join(', '));
         return;
       }
     }
@@ -810,18 +812,18 @@ export class ChecklistWizardComponent implements OnInit {
       next: res => {
         if (res.ok) {
           this.clearDraft();
-          alert('Checklist salvo com sucesso!');
+          this.toast.success('Verificação salva com sucesso!');
           this.router.navigate(['/home']);
           // Mantém saving=true durante redirecionamento
         } else {
           this.saving.set(false);
-          alert('Erro ao salvar: ' + (res.error || res.message || 'Erro desconhecido'));
+          this.toast.error(res.error || res.message || 'Erro desconhecido');
         }
       },
       error: (err) => {
         this.saving.set(false);
         const msg = err.error?.error || 'Erro de conexão ao salvar.';
-        alert(msg);
+        this.toast.error(msg);
       },
     });
   }

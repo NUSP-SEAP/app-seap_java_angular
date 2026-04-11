@@ -61,7 +61,7 @@ a:hover { color: var(--primary-hover); }
 /* ═══ Inputs / Forms ═══ */
 input:not([type="radio"]):not([type="checkbox"]), select, textarea {
   font-family: inherit;
-  font-size: 0.9375rem;
+  font-size: 1rem; /* >= 16px evita zoom automático em iOS Safari/Brave */
   background-color: #fff;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -148,7 +148,7 @@ input[type="date"], input[type="time"] {
   h2 { font-size: 1.25rem; margin: 0; }
 }
 .header-actions { display: flex; gap: 6px; align-items: center; }
-.search-input { padding: 6px 10px; font-size: .85rem; border-radius: 6px; width: 180px; }
+.search-input { padding: 6px 10px; font-size: 1rem; border-radius: 6px; width: 180px; }
 .search-wide { width: 320px; }
 .btn-report {
   background: var(--primary); color: #fff; border: none; border-radius: 6px;
@@ -175,7 +175,7 @@ input[type="date"], input[type="time"] {
 }
 .text-muted-sm { color: var(--muted); font-size: .85rem; }
 .back-link { color: var(--primary); font-size: .9rem; display: inline-block; margin-bottom: 16px; }
-.ctrl-select { padding: 5px 8px; font-size: .8rem; border: 1px solid var(--border); border-radius: 4px; }
+.ctrl-select { padding: 5px 8px; font-size: 1rem; border: 1px solid var(--border); border-radius: 4px; }
 .pag-report-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .report-controls { display: flex; align-items: center; gap: 6px; }
 
