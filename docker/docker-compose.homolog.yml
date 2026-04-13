@@ -1,0 +1,81 @@
+# =============================================================
+# Senado NUSP — Homologação
+# Ambiente isolado: containers, volumes e rede próprios.
+#
+# Uso:
+#   cd /srv/senado-nusp-java-homolog/docker
+#   docker compose -f docker-compose.homolog.yml -p nusp-homolog up -d
+#   docker compose -f docker-compose.homolog.yml -p nusp-homolog build
+#   docker compose -f docker-compose.homolog.yml -p nusp-homolog down
+#
+# Diferenças em relação à produção (docker-compose.yml):
+#   - container_name: *-homolog
+#   - Oracle na porta 1522 (prod: 1521)
+#   - Frontend na porta 8081 (prod: 8080)
+#   - APP_BASE_URL: java.senado-nusp.cloud
+#   - Lê .env.homolog (CORS para java.senado-nusp.cloud)
+# =============================================================
+
+services:
+  # --- Oracle 21c XE ---
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: nusp-oracle-homolog
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_APP_USER}
+      APP_USER_PASSWORD: ${ORACLE_APP_PASSWORD}
+    ports:
+      - "1522:1521"
+    volumes:
+      - oracle-xe-java-data:/opt/oracle/oradata
+      - ./oracle-init:/container-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "sqlplus", "-s", "${ORACLE_APP_USER}/${ORACLE_APP_PASSWORD}@XEPDB1", "<<< 'SELECT 1 FROM DUAL;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # --- Backend (Spring Boot / Java 17) ---
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: nusp-backend-homolog
+    restart: unless-stopped
+    depends_on:
+      oracle:
+        condition: service_started
+    environment:
+      SERVER_PORT: "8003"
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@//oracle:1521/XEPDB1
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      FILES_DIR: /app/files
+      FILES_URL_PREFIX: /files/
+      SPRING_MAIL_HOST: smtp.hostinger.com
+      SPRING_MAIL_PORT: "465"
+      SPRING_MAIL_USERNAME: no-reply@senado-nusp.cloud
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      APP_BASE_URL: https://java.senado-nusp.cloud
+    volumes:
+      - nusp-files:/app/files
+
+  # --- Frontend (Angular + Nginx) ---
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: nusp-frontend-homolog
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  oracle-xe-java-data:
+  nusp-files:
