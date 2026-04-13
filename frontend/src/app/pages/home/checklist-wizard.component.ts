@@ -31,6 +31,10 @@ interface EditItem {
           }
         </div>
 
+        @if (editIsMultiOperador && !canEditChecklist() && editData()?.['criado_por_nome']) {
+          <p class="hint-text" style="margin-bottom:16px">Somente {{ editData()!['criado_por_nome'] }} pode editar este formulário.</p>
+        }
+
         @if (editLoading()) {
           <p class="text-muted-sm">Carregando...</p>
         } @else {
@@ -337,6 +341,7 @@ interface EditItem {
       input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
     }
     .field-ro { background: #f9fafb !important; color: #6b7280; cursor: not-allowed; width: 100%; }
+    .hint-text { color: var(--muted); font-size: .8rem; margin: 6px 0 0; font-style: italic; }
     .edit-radios { display: flex; gap: 8px; margin-top: 6px; }
     .radio-card-sm {
       display: flex; align-items: center; gap: 4px;

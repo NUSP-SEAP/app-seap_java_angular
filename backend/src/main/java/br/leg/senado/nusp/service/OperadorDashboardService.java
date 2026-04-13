@@ -86,6 +86,16 @@ public class OperadorDashboardService {
         result.put("observacoes_editado", boolVal(h[11]));
         result.put("criado_por", str(h[12]));
 
+        // Nome do criador do checklist
+        String criadoPorId = str(h[12]);
+        if (criadoPorId != null && !criadoPorId.isBlank()) {
+            @SuppressWarnings("unchecked")
+            List<Object> nomeRows = em.createNativeQuery(
+                "SELECT NOME_COMPLETO FROM PES_OPERADOR WHERE ID = ?1")
+                .setParameter(1, criadoPorId).getResultList();
+            if (!nomeRows.isEmpty()) result.put("criado_por_nome", str(nomeRows.get(0)));
+        }
+
         @SuppressWarnings("unchecked")
         List<Object[]> itens = em.createNativeQuery("""
                 SELECT r.ID, r.ITEM_TIPO_ID, t.NOME, t.TIPO_WIDGET, r.STATUS, r.DESCRICAO_FALHA, r.VALOR_TEXTO, r.EDITADO
@@ -192,7 +202,8 @@ public class OperadorDashboardService {
                        e.HORARIO_TERMINO_EDITADO, e.USB_01_EDITADO, e.USB_02_EDITADO,
                        e.OBSERVACOES_EDITADO, e.COMISSAO_EDITADO, e.SALA_EDITADO,
                        e.HORA_ENTRADA_EDITADO, e.HORA_SAIDA_EDITADO,
-                       e.SUSPENSOES_EDITADO, e.OPERADOR_ID
+                       e.SUSPENSOES_EDITADO, e.OPERADOR_ID,
+                       r.DATA_EDITADO
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
                 JOIN CAD_SALA s ON s.ID = r.SALA_ID
@@ -228,6 +239,17 @@ public class OperadorDashboardService {
         result.put("hora_saida_editado", boolVal(r[32]));
         result.put("suspensoes_editado", boolVal(r[33]));
         result.put("operador_id", str(r[34]));
+        result.put("data_editado", boolVal(r[35]));
+
+        // Nome do operador responsável (criador da entrada)
+        String opId = str(r[34]);
+        if (opId != null && !opId.isBlank()) {
+            @SuppressWarnings("unchecked")
+            List<Object> nomeRows = em.createNativeQuery(
+                "SELECT NOME_COMPLETO FROM PES_OPERADOR WHERE ID = ?1")
+                .setParameter(1, opId).getResultList();
+            if (!nomeRows.isEmpty()) result.put("operador_nome", str(nomeRows.get(0)));
+        }
 
         // Multi-operador: flag da sala + operadores da junction + suspensões
         long salaIdLong = num(r[16]);

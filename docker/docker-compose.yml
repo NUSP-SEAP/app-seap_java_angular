@@ -48,7 +48,7 @@ services:
       SPRING_MAIL_PORT: "465"
       SPRING_MAIL_USERNAME: no-reply@senado-nusp.cloud
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
-      APP_BASE_URL: https://java.senado-nusp.cloud
+      APP_BASE_URL: https://senado-nusp.cloud
     volumes:
       - nusp-files:/app/files
 

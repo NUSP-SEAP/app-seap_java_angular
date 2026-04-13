@@ -36,6 +36,10 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
         <p class="hint-text" style="margin-bottom:16px">Preencha os dados da operação de áudio realizada no local selecionado.</p>
       }
 
+      @if (editMode() && isMultiOperador && !canEditOperacao() && editData()?.['operador_nome']) {
+        <p class="hint-text" style="margin-bottom:16px">Somente {{ editData()!['operador_nome'] }} pode editar este formulário.</p>
+      }
+
       @if (loading()) {
         <p style="color:var(--muted)">Carregando...</p>
       } @else {
@@ -120,7 +124,7 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
           <!-- Plenário Principal: Data + Início + Término -->
           <div class="form-grid-3">
             <div class="form-row">
-              <label>Data <span class="req">*</span></label>
+              <label>Data <span class="req">*</span> @if (editData()?.['data_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="date" [(ngModel)]="dataOperacao" name="data_operacao" [disabled]="formDisabled()" [readonly]="isRO()" [class.field-ro]="isRO()">
             </div>
             <div class="form-row">

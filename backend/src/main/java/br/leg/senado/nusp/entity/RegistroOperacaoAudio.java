@@ -44,6 +44,9 @@ public class RegistroOperacaoAudio {
     @Column(name = "CHECKLIST_DO_DIA_OK")
     private Boolean checklistDoDiaOk;
 
+    @Column(name = "DATA_EDITADO", nullable = false)
+    private Boolean dataEditado = false;
+
     @PrePersist
     protected void onCreate() {
         this.criadoEm = Instant.now();

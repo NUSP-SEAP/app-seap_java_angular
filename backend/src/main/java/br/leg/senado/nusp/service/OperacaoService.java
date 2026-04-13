@@ -580,6 +580,14 @@ public class OperacaoService {
             horarioTermino = null;
         }
 
+        // data_operacao (Plenário Principal permite alterar data)
+        String dataOperacaoRaw = clean(body, "data_operacao");
+        LocalDate novaData = null;
+        if (isMultiOp && dataOperacaoRaw != null && !dataOperacaoRaw.isBlank()) {
+            try { novaData = LocalDate.parse(dataOperacaoRaw); }
+            catch (Exception e) { /* ignora formato inválido */ }
+        }
+
         Long registroId = entradaRepo.findRegistroIdByEntradaId(entradaId).orElse(0L);
 
         // Validação completa de horários (plenários numerados)
@@ -690,6 +698,20 @@ public class OperacaoService {
             }
         }
 
+        // Atualizar data do registro (Plenário Principal)
+        if (novaData != null && registroId > 0) {
+            entityManager.createNativeQuery("""
+                UPDATE OPR_REGISTRO_AUDIO SET DATA = :dt,
+                    DATA_EDITADO = CASE WHEN DATA_EDITADO = 1 THEN 1
+                        WHEN DATA != :dt2 THEN 1 ELSE 0 END
+                WHERE ID = :rid
+                """)
+                .setParameter("dt", novaData)
+                .setParameter("dt2", novaData)
+                .setParameter("rid", registroId)
+                .executeUpdate();
+        }
+
         // Atualizar sala se permitido
         if (novoSalaId != null) {
             entradaRepo.marcarSalaEditado(entradaId, novoSalaId);
@@ -698,10 +720,18 @@ public class OperacaoService {
 
         // Atualizar suspensões se multi-operador
         if (isMultiOp && body.containsKey("suspensoes")) {
+            // Capturar suspensões anteriores para comparar
+            List<Suspensao> suspAntigas = suspensaoRepo.findByEntradaIdOrderByOrdemAsc(entradaId);
+            String suspAntigasKey = suspAntigas.stream()
+                    .map(s -> (s.getHoraSuspensao() == null ? "" : s.getHoraSuspensao())
+                            + "|" + (s.getHoraReabertura() == null ? "" : s.getHoraReabertura()))
+                    .collect(Collectors.joining(","));
+
             suspensaoRepo.deleteByEntradaId(entradaId);
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> suspensoes = body.get("suspensoes") instanceof List
                     ? (List<Map<String, Object>>) body.get("suspensoes") : List.of();
+            List<String> suspNovasKeys = new ArrayList<>();
             int ordemSusp = 1;
             for (Map<String, Object> susp : suspensoes) {
                 String hs = normalizeTime(susp.get("hora_suspensao") != null ? susp.get("hora_suspensao").toString() : "");
@@ -713,11 +743,15 @@ public class OperacaoService {
                     s.setHoraReabertura(hr);
                     s.setOrdem(ordemSusp++);
                     suspensaoRepo.save(s);
+                    suspNovasKeys.add((hs == null ? "" : hs) + "|" + (hr == null ? "" : hr));
                 }
             }
-            entityManager.createNativeQuery(
-                "UPDATE OPR_REGISTRO_ENTRADA SET SUSPENSOES_EDITADO = 1 WHERE ID = :id")
-                .setParameter("id", entradaId).executeUpdate();
+            String suspNovasKey = String.join(",", suspNovasKeys);
+            if (!suspAntigasKey.equals(suspNovasKey)) {
+                entityManager.createNativeQuery(
+                    "UPDATE OPR_REGISTRO_ENTRADA SET SUSPENSOES_EDITADO = 1 WHERE ID = :id")
+                    .setParameter("id", entradaId).executeUpdate();
+            }
         }
 
         // Atualizar operadores da sessão se multi-operador
