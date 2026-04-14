@@ -36,8 +36,6 @@ public class AuthService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, String> findUserForLogin(String usuario) {
-        String usuarioLower = usuario.toLowerCase();
-
         String sql = """
                 SELECT 'administrador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
                 FROM PES_ADMINISTRADOR
@@ -51,7 +49,7 @@ public class AuthService {
 
         List<Object[]> rows = entityManager
                 .createNativeQuery(sql)
-                .setParameter("usuario", usuarioLower)
+                .setParameter("usuario", usuario)
                 .getResultList();
 
         if (rows.isEmpty()) return null;

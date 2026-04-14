@@ -59,7 +59,7 @@ public class PasswordResetService {
 
         List<Object[]> rows = entityManager
                 .createNativeQuery(sql)
-                .setParameter("username", username.toLowerCase())
+                .setParameter("username", username)
                 .getResultList();
 
         if (rows.isEmpty()) return null;

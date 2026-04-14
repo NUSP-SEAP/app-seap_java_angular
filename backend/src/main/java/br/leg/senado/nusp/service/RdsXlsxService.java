@@ -35,6 +35,8 @@ public class RdsXlsxService {
 
     private static final int START_ROW = 10; // row index 10 = linha 11 do Excel
     private static final int BASE_END_ROW = 39; // row index 39 = linha 40
+    private static final int FIRST_OP_COL = 8;  // coluna I = índice 8
+    private static final int DEFAULT_OP_COUNT = 3;
 
     public byte[] gerarRdsXlsx(int ano, int mes, List<Map<String, Object>> rawRows) {
         try {
@@ -49,10 +51,17 @@ public class RdsXlsxService {
                 Sheet ws = wb.getSheet(sheetName);
                 if (ws == null) continue;
 
+                // Capturar estilos do template ANTES de limpar
+                CellStyle dataStyle = null;   // estilo das células de dados (coluna I)
+                Row templateRow = ws.getRow(START_ROW);
+                if (templateRow != null) {
+                    Cell templateCell = templateRow.getCell(FIRST_OP_COL);
+                    if (templateCell != null) dataStyle = templateCell.getCellStyle();
+                }
+
                 clearBody(ws);
 
                 if (d > lastDay) {
-                    // Dia inexistente (ex: 31 em abril)
                     setCellValue(ws, 6, 0, null); // A7
                     continue;
                 }
@@ -64,28 +73,60 @@ public class RdsXlsxService {
                     continue;
                 }
 
+                // Calcular maxOps para este dia
+                int maxOps = DEFAULT_OP_COUNT;
+                for (Map<String, Object> line : lines) {
+                    List<String> ops = getOperadores(line);
+                    if (ops != null && ops.size() > maxOps) maxOps = ops.size();
+                }
+                int obsCol = FIRST_OP_COL + maxOps;
+
+                // Atualizar headers e larguras de operadores se houver mais de 3
+                if (maxOps > DEFAULT_OP_COUNT) {
+                    updateOperadorHeaders(ws, maxOps);
+                }
+
                 // Preencher A7 com data extenso
                 LocalDate date = LocalDate.of(ano, mes, d);
                 setCellValue(ws, 6, 0, formatDataExtenso(date));
 
-                ensureRows(ws, lines.size());
+                ensureRows(ws, lines.size(), obsCol + 1);
 
                 for (int idx = 0; idx < lines.size(); idx++) {
                     int row = START_ROW + idx;
                     Map<String, Object> line = lines.get(idx);
 
-                    setCellValue(ws, row, 0, objStr(line, "sala_nome"));        // A
-                    setCellValue(ws, row, 1, "SGM");                            // B
+                    setCellValue(ws, row, 0, objStr(line, "sala_nome"));            // A
+                    setCellValue(ws, row, 1, "SGM");                                // B
                     setCellValue(ws, row, 2, objStr(line, "atividade_legislativa")); // C
-                    setCellValue(ws, row, 3, objStr(line, "nome_evento"));       // D
-                    setCellValue(ws, row, 4, trimSeconds(objStr(line, "horario_pauta")));     // E
-                    setCellValue(ws, row, 5, null);                                            // F
+                    setCellValue(ws, row, 3, objStr(line, "nome_evento"));           // D
+                    setCellValue(ws, row, 4, trimSeconds(objStr(line, "horario_pauta")));      // E
+                    setCellValue(ws, row, 5, null);                                             // F
                     setCellValue(ws, row, 6, trimSeconds(objStr(line, "horario_inicio")));      // G
                     setCellValue(ws, row, 7, trimSeconds(objStr(line, "horario_termino")));     // H
-                    setCellValue(ws, row, 8, objStr(line, "op1"));               // I
-                    setCellValue(ws, row, 9, objStr(line, "op2"));               // J
-                    setCellValue(ws, row, 10, objStr(line, "op3"));              // K
-                    setCellValue(ws, row, 11, objStr(line, "obs"));              // L
+
+                    // Operadores (colunas dinâmicas a partir de I)
+                    List<String> ops = getOperadores(line);
+                    for (int i = 0; i < maxOps; i++) {
+                        String opName = (ops != null && i < ops.size()) ? ops.get(i) : null;
+                        setCellValue(ws, row, FIRST_OP_COL + i, opName);
+                    }
+
+                    setCellValue(ws, row, obsCol, objStr(line, "obs"));             // Observações
+                }
+
+                // Aplicar estilo (bordas + fonte) nas colunas extras — todas as linhas do body (11-40)
+                if (maxOps > DEFAULT_OP_COUNT && dataStyle != null) {
+                    int bodyEnd = Math.max(BASE_END_ROW, START_ROW + lines.size() - 1);
+                    for (int r = START_ROW; r <= bodyEnd; r++) {
+                        Row row = ws.getRow(r);
+                        if (row == null) row = ws.createRow(r);
+                        for (int col = FIRST_OP_COL + DEFAULT_OP_COUNT; col <= obsCol; col++) {
+                            Cell cell = row.getCell(col);
+                            if (cell == null) cell = row.createCell(col);
+                            cell.setCellStyle(dataStyle);
+                        }
+                    }
                 }
             }
 
@@ -193,17 +234,17 @@ public class RdsXlsxService {
                 line.put("horario_pauta", chooseValue(groupEntries, "horario_pauta"));
                 line.put("horario_inicio", chooseValue(groupEntries, "horario_inicio"));
                 line.put("horario_termino", fimOut);
-                // Plenário Principal: usar nomes da junction table (multi_op_names)
+                // Operadores: lista dinâmica (suporta mais de 3)
                 List<String> multiOps = getMultiOpNames(byOrdem, start);
+                List<String> operadores = new ArrayList<>();
                 if (multiOps != null) {
-                    line.put("op1", multiOps.size() > 0 ? multiOps.get(0) : null);
-                    line.put("op2", multiOps.size() > 1 ? multiOps.get(1) : null);
-                    line.put("op3", multiOps.size() > 2 ? multiOps.get(2) : null);
+                    operadores.addAll(multiOps);
                 } else {
-                    line.put("op1", objStr(byOrdem.getOrDefault(start, Map.of()), "operador_nome_exibicao"));
-                    line.put("op2", objStr(byOrdem.getOrDefault(start + 1, Map.of()), "operador_nome_exibicao"));
-                    line.put("op3", objStr(byOrdem.getOrDefault(start + 2, Map.of()), "operador_nome_exibicao"));
+                    for (int o = start; o < start + 3; o++) {
+                        operadores.add(objStr(byOrdem.getOrDefault(o, Map.of()), "operador_nome_exibicao"));
+                    }
                 }
+                line.put("operadores", operadores);
                 line.put("obs", obs);
 
                 Object dataObj = sess.get("data");
@@ -277,14 +318,14 @@ public class RdsXlsxService {
         for (int r = START_ROW; r <= endRow; r++) {
             Row row = ws.getRow(r);
             if (row == null) continue;
-            for (int c = 0; c < 12; c++) { // A..L
+            for (int c = 0; c <= row.getLastCellNum(); c++) {
                 Cell cell = row.getCell(c);
                 if (cell != null) cell.setBlank();
             }
         }
     }
 
-    private void ensureRows(Sheet ws, int totalLines) {
+    private void ensureRows(Sheet ws, int totalLines, int totalCols) {
         int baseCapacity = BASE_END_ROW - START_ROW + 1; // 30
         if (totalLines <= baseCapacity) return;
 
@@ -297,13 +338,65 @@ public class RdsXlsxService {
             Row dstRow = ws.createRow(insertAt + i);
             if (srcRow != null) {
                 dstRow.setHeight(srcRow.getHeight());
-                for (int c = 0; c < 12; c++) {
+                for (int c = 0; c < totalCols; c++) {
                     Cell src = srcRow.getCell(c);
                     Cell dst = dstRow.createCell(c);
                     if (src != null) dst.setCellStyle(src.getCellStyle());
                 }
             }
         }
+    }
+
+    /**
+     * Atualiza os headers de operadores quando há mais de 3.
+     * Escreve "Operador 1", "Operador 2", ..., "Operador N" e reposiciona "Observações".
+     * Também ajusta larguras das colunas novas.
+     */
+    private void updateOperadorHeaders(Sheet ws, int maxOps) {
+        Row headerRow = ws.getRow(START_ROW - 1); // linha de cabeçalho (row 10 no Excel)
+        if (headerRow == null) return;
+
+        // Copiar estilo e largura da primeira coluna de operador
+        CellStyle opStyle = null;
+        Cell firstOpCell = headerRow.getCell(FIRST_OP_COL);
+        if (firstOpCell != null) opStyle = firstOpCell.getCellStyle();
+        int opWidth = ws.getColumnWidth(FIRST_OP_COL);
+
+        // Largura da coluna original de Observações (col L) para reutilizar
+        int obsOrigWidth = ws.getColumnWidth(FIRST_OP_COL + DEFAULT_OP_COUNT);
+
+        for (int i = 0; i < maxOps; i++) {
+            int col = FIRST_OP_COL + i;
+            // Remover célula existente (inlineStr do template) e recriar
+            Cell existing = headerRow.getCell(col);
+            if (existing != null) headerRow.removeCell(existing);
+            Cell cell = headerRow.createCell(col);
+            cell.setCellValue("OPERADOR " + (i + 1));
+            if (opStyle != null) cell.setCellStyle(opStyle);
+            if (i >= DEFAULT_OP_COUNT) {
+                ws.setColumnWidth(col, opWidth);
+                ws.setColumnHidden(col, false);
+            }
+        }
+
+        // Reposicionar "Observações" após o último operador
+        int obsCol = FIRST_OP_COL + maxOps;
+        Cell obsExisting = headerRow.getCell(obsCol);
+        if (obsExisting != null) headerRow.removeCell(obsExisting);
+        Cell obsCell = headerRow.createCell(obsCol);
+        obsCell.setCellValue("OBSERVAÇÕES");
+        if (opStyle != null) obsCell.setCellStyle(opStyle);
+        ws.setColumnWidth(obsCol, obsOrigWidth);
+        ws.setColumnHidden(obsCol, false);
+
+    }
+
+    /** Extrai a lista de operadores de uma linha. */
+    @SuppressWarnings("unchecked")
+    private List<String> getOperadores(Map<String, Object> line) {
+        Object ops = line.get("operadores");
+        if (ops instanceof List<?> list) return (List<String>) list;
+        return null;
     }
 
     private void setCellValue(Sheet ws, int rowIdx, int colIdx, String value) {
