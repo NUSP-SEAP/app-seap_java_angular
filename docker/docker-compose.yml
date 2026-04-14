@@ -46,8 +46,12 @@ services:
       FILES_URL_PREFIX: /files/
       SPRING_MAIL_HOST: smtp.hostinger.com
       SPRING_MAIL_PORT: "465"
-      SPRING_MAIL_USERNAME: no-reply@senado-nusp.cloud
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      ADMIN_SUPERVISOR_USERNAME: ${ADMIN_SUPERVISOR_USERNAME}
+      ADMIN_CHEFE_USERNAME: ${ADMIN_CHEFE_USERNAME}
+      ADMIN_MASTER_USERNAME: ${ADMIN_MASTER_USERNAME}
       APP_BASE_URL: https://senado-nusp.cloud
     volumes:
       - nusp-files:/app/files

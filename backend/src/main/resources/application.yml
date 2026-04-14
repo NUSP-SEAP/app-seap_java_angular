@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: NUSP
-    password: NuspApp2026
+    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
   jpa:
     hibernate:
@@ -19,7 +19,7 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:smtp.hostinger.com}
     port: ${SPRING_MAIL_PORT:465}
-    username: ${SPRING_MAIL_USERNAME:no-reply@senado-nusp.cloud}
+    username: ${SPRING_MAIL_USERNAME}
     password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
@@ -32,23 +32,23 @@ spring:
 
 app:
   jwt:
-    secret: ${AUTH_JWT_SECRET:aoxTsY3IGbPHc8B60pnS_txFGMGJo6HFCpd3N2BhR4hIuMlkx6GsMqNejI88YoIl}
+    secret: ${AUTH_JWT_SECRET}
     ttl-seconds: ${AUTH_JWT_TTL_SEC:5400}
     cookie-name: ${AUTH_JWT_COOKIE_NAME:sn_auth_jwt}
     cookie-domain: ${AUTH_JWT_COOKIE_DOMAIN:}
   session:
     touch-max-age-seconds: ${SESSION_TOUCH_MAX_AGE_SECONDS:5400}
   files:
-    dir: ${FILES_DIR:/home/douglas/senado-nusp/files}
+    dir: ${FILES_DIR}
     url-prefix: ${FILES_URL_PREFIX:/files/}
     operadores-dirname: operadores
   password-reset:
     token-ttl-minutes: ${PASSWORD_RESET_TTL_MIN:30}
     base-url: ${APP_BASE_URL:http://localhost:4200}
   admin:
-    supervisor-username: ${ADMIN_SUPERVISOR_USERNAME:emanoel}
-    chefe-username: ${ADMIN_CHEFE_USERNAME:evandrop}
-    master-username: ${ADMIN_MASTER_USERNAME:douglas.antunes}
+    supervisor-username: ${ADMIN_SUPERVISOR_USERNAME}
+    chefe-username: ${ADMIN_CHEFE_USERNAME}
+    master-username: ${ADMIN_MASTER_USERNAME}
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,http://100.84.123.75:4200}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}

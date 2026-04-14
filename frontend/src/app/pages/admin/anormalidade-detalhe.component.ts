@@ -224,14 +224,12 @@ export class AnormalidadeDetalheComponent implements OnInit {
 
   canEditSupervisor(): boolean {
     if (!this.isAdmin()) return false;
-    const user = this.auth.user();
-    return user?.username === 'emanoel';
+    return this.auth.user()?.canEditObsSupervisor === true;
   }
 
   canEditChefe(): boolean {
     if (!this.isAdmin()) return false;
-    const user = this.auth.user();
-    return user?.username === 'evandrop';
+    return this.auth.user()?.canEditObsChefe === true;
   }
 
   salvarObsSupervisor(): void {

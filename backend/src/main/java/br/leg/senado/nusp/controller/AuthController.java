@@ -32,6 +32,12 @@ public class AuthController {
     @Value("${app.session.touch-max-age-seconds}")
     private int maxAgeSeconds;
 
+    @Value("${app.admin.supervisor-username}")
+    private String supervisorUsername;
+
+    @Value("${app.admin.chefe-username}")
+    private String chefeUsername;
+
     // =========================================================================
     // POST /api/login
     // Equivale ao login_view() do Python
@@ -66,15 +72,20 @@ public class AuthController {
 
         String fotoUrl = authService.getFotoUrl(user.get("id"), user.get("perfil"));
 
+        boolean isAdmin = "administrador".equals(user.get("perfil"));
+        String uname = user.get("username");
+
         return ResponseEntity.ok(Map.of(
                 "token", token,
-                "user", Map.of(
-                        "id",       user.get("id"),
-                        "role",     user.get("perfil"),
-                        "username", user.get("username"),
-                        "nome",     user.get("nome_completo"),
-                        "email",    user.get("email"),
-                        "foto_url", fotoUrl != null ? fotoUrl : ""
+                "user", Map.ofEntries(
+                        Map.entry("id",       user.get("id")),
+                        Map.entry("role",     user.get("perfil")),
+                        Map.entry("username", user.get("username")),
+                        Map.entry("nome",     user.get("nome_completo")),
+                        Map.entry("email",    user.get("email")),
+                        Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
+                        Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
+                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername))
                 )
         ));
     }
@@ -86,14 +97,19 @@ public class AuthController {
     @GetMapping("/whoami")
     public ResponseEntity<?> whoami(@AuthenticationPrincipal UserPrincipal principal) {
         String fotoUrl = authService.getFotoUrl(principal.getId(), principal.getRole());
+        boolean isAdmin = "administrador".equals(principal.getRole());
+        String uname = principal.getUsername();
+
         return ResponseEntity.ok(Map.of(
                 "ok",   true,
-                "user", Map.of(
-                        "id",       principal.getId(),
-                        "username", principal.getUsername(),
-                        "name",     principal.getName(),
-                        "email",    principal.getEmail(),
-                        "foto_url", fotoUrl != null ? fotoUrl : ""
+                "user", Map.ofEntries(
+                        Map.entry("id",       principal.getId()),
+                        Map.entry("username", principal.getUsername()),
+                        Map.entry("name",     principal.getName()),
+                        Map.entry("email",    principal.getEmail()),
+                        Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
+                        Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
+                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername))
                 ),
                 "role", principal.getRole(),
                 "exp",  principal.getExp()

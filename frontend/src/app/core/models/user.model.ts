@@ -6,6 +6,8 @@ export interface User {
   email: string;
   foto_url?: string;
   role?: string;
+  canEditObsSupervisor?: boolean;
+  canEditObsChefe?: boolean;
 }
 
 export interface LoginResponse {
