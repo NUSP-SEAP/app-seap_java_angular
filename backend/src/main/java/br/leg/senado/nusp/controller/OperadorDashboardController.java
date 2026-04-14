@@ -5,6 +5,7 @@ import br.leg.senado.nusp.service.*;
 import br.leg.senado.nusp.service.DashboardQueryHelper.PagedResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/operador")
 @RequiredArgsConstructor
+@Tag(name = "Painel do Operador", description = "Dashboard e relatórios do operador autenticado")
 public class OperadorDashboardController {
 
     private final OperadorDashboardService dashboardService;

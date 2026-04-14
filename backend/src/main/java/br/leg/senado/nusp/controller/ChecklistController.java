@@ -3,6 +3,7 @@ package br.leg.senado.nusp.controller;
 import br.leg.senado.nusp.repository.ChecklistRepository;
 import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.ChecklistService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/forms/checklist")
 @RequiredArgsConstructor
+@Tag(name = "Checklist", description = "Registro e edição de checklists de sala")
 public class ChecklistController {
 
     private final ChecklistService checklistService;

@@ -6,6 +6,7 @@ import br.leg.senado.nusp.entity.Sala;
 import br.leg.senado.nusp.repository.ComissaoRepository;
 import br.leg.senado.nusp.repository.OperadorRepository;
 import br.leg.senado.nusp.repository.SalaRepository;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/forms/lookup")
 @RequiredArgsConstructor
+@Tag(name = "Lookup", description = "Dados de referência públicos (operadores, salas, comissões)")
 public class LookupController {
 
     private final OperadorRepository operadorRepository;

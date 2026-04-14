@@ -27,6 +27,9 @@ spring:
           auth: true
           ssl:
             enable: true
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    default-schema: NUSP
   jackson:
     default-property-inclusion: non_null
 

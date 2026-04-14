@@ -8,6 +8,7 @@ export interface User {
   role?: string;
   canEditObsSupervisor?: boolean;
   canEditObsChefe?: boolean;
+  isMaster?: boolean;
 }
 
 export interface LoginResponse {

@@ -3,6 +3,7 @@
 !backend/
 !frontend/
 !docker/
+!.github/
 !.dockerignore
 !.gitignore
 

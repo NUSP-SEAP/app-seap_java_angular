@@ -10,6 +10,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Autenticação", description = "Login, logout, refresh de token e sessão")
 public class AuthController {
 
     private final AuthService authService;
@@ -37,6 +39,9 @@ public class AuthController {
 
     @Value("${app.admin.chefe-username}")
     private String chefeUsername;
+
+    @Value("${app.admin.master-username}")
+    private String masterUsername;
 
     // =========================================================================
     // POST /api/login
@@ -85,7 +90,8 @@ public class AuthController {
                         Map.entry("email",    user.get("email")),
                         Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
                         Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
-                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername))
+                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername)),
+                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername))
                 )
         ));
     }
@@ -109,7 +115,8 @@ public class AuthController {
                         Map.entry("email",    principal.getEmail()),
                         Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
                         Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
-                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername))
+                        Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername)),
+                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername))
                 ),
                 "role", principal.getRole(),
                 "exp",  principal.getExp()

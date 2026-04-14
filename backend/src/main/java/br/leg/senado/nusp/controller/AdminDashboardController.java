@@ -5,6 +5,7 @@ import br.leg.senado.nusp.service.*;
 import br.leg.senado.nusp.service.DashboardQueryHelper.PagedResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Dashboard", description = "Consultas, listagens e relatórios administrativos (requer ROLE_ADMINISTRADOR)")
 public class AdminDashboardController {
 
     private final AdminDashboardService dashboardService;

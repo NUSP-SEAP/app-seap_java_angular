@@ -9,6 +9,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Health", description = "Verificação de saúde da aplicação")
 public class HealthController {
 
     @GetMapping("/health")

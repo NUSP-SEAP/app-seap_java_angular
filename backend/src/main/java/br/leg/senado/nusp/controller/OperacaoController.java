@@ -8,6 +8,7 @@ import br.leg.senado.nusp.repository.RegistroOperacaoOperadorRepository;
 import br.leg.senado.nusp.repository.SalaRepository;
 import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.OperacaoService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,6 +26,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Operação de Áudio", description = "Registro de operações de áudio (ROA), sessões e entradas")
 public class OperacaoController {
 
     private final OperacaoService operacaoService;

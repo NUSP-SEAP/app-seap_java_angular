@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/forms/checklist/itens-tipo").permitAll()
                 .requestMatchers("/api/password/**").permitAll()
                 .requestMatchers("/files/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 // Admin
                 .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
                 // Tudo mais requer autenticação

@@ -1,6 +1,7 @@
 package br.leg.senado.nusp.controller;
 
 import br.leg.senado.nusp.service.PasswordResetService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -10,6 +11,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/password")
 @RequiredArgsConstructor
+@Tag(name = "Recuperação de Senha", description = "Solicitação e redefinição de senha via token por e-mail")
 public class PasswordResetController {
 
     private final PasswordResetService passwordResetService;

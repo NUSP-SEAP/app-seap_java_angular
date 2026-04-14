@@ -4,6 +4,7 @@ import br.leg.senado.nusp.config.JwtConfig;
 import br.leg.senado.nusp.repository.AuthSessionRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Equivalente ao decorator @jwt_required do Python.
@@ -47,7 +49,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.equals("/api/forms/checklist/itens-tipo")
                 || path.startsWith("/api/password/")
                 || path.equals("/api/auth/html-guard")
-                || path.startsWith("/files/");
+                || path.startsWith("/files/")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs");
     }
 
     @Override
@@ -132,10 +136,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private void sendUnauthorized(HttpServletResponse response, String message) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
         response.setCharacterEncoding("UTF-8");
-        response.getWriter().write("{\"error\":\"unauthorized\",\"message\":\"" + message + "\"}");
+        MAPPER.writeValue(response.getWriter(), Map.of("error", "unauthorized", "message", message));
     }
 }

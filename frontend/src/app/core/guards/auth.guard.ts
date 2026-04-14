@@ -20,3 +20,13 @@ export const adminGuard: CanActivateFn = () => {
   else router.navigate(['/login']);
   return false;
 };
+
+export const masterGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  if (auth.isLoggedIn() && auth.isAdmin() && auth.user()?.isMaster) return true;
+  if (auth.isLoggedIn()) router.navigate(['/admin']);
+  else router.navigate(['/login']);
+  return false;
+};

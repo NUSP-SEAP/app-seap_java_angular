@@ -4,6 +4,7 @@ import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.AdminCrudService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Cadastros", description = "CRUD de operadores, administradores e configurações de formulário (requer ROLE_ADMINISTRADOR)")
 public class AdminCrudController {
 
     private final AdminCrudService crudService;
