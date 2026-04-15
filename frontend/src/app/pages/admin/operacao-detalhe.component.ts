@@ -68,6 +68,24 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
             }
           </div>
 
+          <!-- Trilha dos Gravadores -->
+          <div class="field-row grid-2">
+            <div class="field">
+              <label>Trilha do Gravador 01</label>
+              <div class="field-value">{{ d()!['usb_01'] || '-' }}</div>
+            </div>
+            <div class="field">
+              <label>Trilha do Gravador 02</label>
+              <div class="field-value">{{ d()!['usb_02'] || '-' }}</div>
+            </div>
+          </div>
+
+          <!-- Observações -->
+          <div class="field">
+            <label>Observações</label>
+            <div class="field-value obs-value">{{ d()!['observacoes'] || '' }}</div>
+          </div>
+
           <!-- Houve Anormalidade -->
           <div class="field">
             <label>Houve Anormalidade?</label>
