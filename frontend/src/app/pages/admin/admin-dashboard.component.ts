@@ -24,10 +24,10 @@ interface TableState extends ListParams {
     <div class="grid-cards">
       <a routerLink="/home" class="card-custom card-link">Página Inicial dos Operadores</a>
       <a routerLink="/admin/novo-operador" class="card-custom card-link">Cadastro de Operador</a>
-      <a class="card-custom card-link card-disabled">Escala Semanal</a>
+      <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
       <a routerLink="/admin/operacoes" class="card-custom card-link">Operações de Áudio</a>
       <a routerLink="/admin/form-edit" class="card-custom card-link">Edição de Formulários</a>
-      <a class="card-custom card-link card-disabled">Dashboard Metabase (teste)</a>
+      <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa</a>
     </div>
 
     <!-- ═══ Operadores ═══ -->

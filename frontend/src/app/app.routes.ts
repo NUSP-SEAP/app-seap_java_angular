@@ -19,6 +19,7 @@ export const routes: Routes = [
       { path: 'anormalidade', title: 'Registro de Anormalidade na Operação de Áudio', loadComponent: () => import('./pages/home/anormalidade-form.component').then(m => m.AnormalidadeFormComponent) },
       { path: 'anormalidade/edit', title: 'Registro de Anormalidade na Operação de Áudio', loadComponent: () => import('./pages/home/anormalidade-form.component').then(m => m.AnormalidadeFormComponent) },
       { path: 'anormalidade/detalhe', title: 'Detalhe da Anormalidade | Operador', loadComponent: () => import('./pages/admin/anormalidade-detalhe.component').then(m => m.AnormalidadeDetalheComponent) },
+      { path: 'agenda', title: 'Agenda Legislativa | Senado NUSP', loadComponent: () => import('./pages/home/agenda-legislativa.component').then(m => m.AgendaLegislativaComponent) },
 
       // ── Admin ──
       { path: 'admin', canActivate: [adminGuard], children: [
@@ -26,6 +27,8 @@ export const routes: Routes = [
         { path: 'operacoes', title: 'Operações de Áudio | Admin', loadComponent: () => import('./pages/admin/admin-operacoes.component').then(m => m.AdminOperacoesComponent) },
         { path: 'novo-operador', title: 'Novo Operador — Administração', loadComponent: () => import('./pages/admin/admin-novo-operador.component').then(m => m.AdminNovoOperadorComponent) },
         { path: 'novo-admin', canActivate: [masterGuard], title: 'Novo Administrador — Administração', loadComponent: () => import('./pages/admin/admin-novo-admin.component').then(m => m.AdminNovoAdminComponent) },
+        { path: 'escala', title: 'Escala Semanal | Admin', loadComponent: () => import('./pages/admin/admin-escala.component').then(m => m.AdminEscalaComponent) },
+        { path: 'agenda', title: 'Agenda Legislativa | Admin', loadComponent: () => import('./pages/admin/admin-agenda.component').then(m => m.AdminAgendaComponent) },
         { path: 'form-edit', title: 'Edição de Formulários | Admin', loadComponent: () => import('./pages/admin/admin-form-edit.component').then(m => m.AdminFormEditComponent) },
         { path: 'checklist/detalhe', title: 'Detalhe do Checklist | Admin', loadComponent: () => import('./pages/admin/checklist-detalhe.component').then(m => m.ChecklistDetalheComponent) },
         { path: 'operacao/detalhe', title: 'Detalhe da Operação | Admin', loadComponent: () => import('./pages/admin/operacao-detalhe.component').then(m => m.OperacaoDetalheComponent) },

@@ -60,6 +60,11 @@ export class ApiService {
     return this.http.patch<T>(this.url(endpoint), body);
   }
 
+  /** DELETE. */
+  delete<T = ApiResponse>(endpoint: string): Observable<T> {
+    return this.http.delete<T>(this.url(endpoint));
+  }
+
   /** POST multipart (upload de arquivo). */
   postForm<T = ApiResponse>(endpoint: string, formData: FormData): Observable<T> {
     return this.http.post<T>(this.url(endpoint), formData);

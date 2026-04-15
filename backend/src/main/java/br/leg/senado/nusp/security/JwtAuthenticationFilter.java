@@ -61,6 +61,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = extractBearerToken(request);
 
         if (token == null) {
+            // Tenta query param (para SSE — EventSource não suporta headers)
+            token = request.getParameter("token");
+        }
+
+        if (token == null) {
             // Tenta cookie como fallback (para compatibilidade)
             token = extractCookieToken(request);
         }
