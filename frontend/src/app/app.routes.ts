@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, adminGuard, masterGuard } from './core/guards/auth.guard';
+import { authGuard, adminGuard, masterGuard, adminRedirectGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   { path: 'login', title: 'Login | Senado NUSP', loadComponent: () => import('./pages/login/login.component').then(m => m.LoginComponent) },
@@ -31,6 +31,7 @@ export const routes: Routes = [
         { path: 'operacao/detalhe', title: 'Detalhe da Operação | Admin', loadComponent: () => import('./pages/admin/operacao-detalhe.component').then(m => m.OperacaoDetalheComponent) },
         { path: 'anormalidade/detalhe', title: 'Detalhe da Anormalidade | Admin', loadComponent: () => import('./pages/admin/anormalidade-detalhe.component').then(m => m.AnormalidadeDetalheComponent) },
       ]},
+      { path: '', redirectTo: 'admin', pathMatch: 'full', canMatch: [adminRedirectGuard] },
       { path: '', redirectTo: 'home', pathMatch: 'full' },
     ],
   },

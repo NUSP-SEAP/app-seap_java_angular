@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
 export const authGuard: CanActivateFn = () => {
@@ -19,6 +19,10 @@ export const adminGuard: CanActivateFn = () => {
   if (auth.isLoggedIn()) router.navigate(['/home']);
   else router.navigate(['/login']);
   return false;
+};
+
+export const adminRedirectGuard: CanMatchFn = () => {
+  return inject(AuthService).isAdmin();
 };
 
 export const masterGuard: CanActivateFn = () => {
