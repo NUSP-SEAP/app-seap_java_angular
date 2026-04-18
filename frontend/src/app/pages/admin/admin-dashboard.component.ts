@@ -56,10 +56,11 @@ interface TableState extends ListParams {
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
             <th style="width:120px">Op. Plenário</th>
+            <th style="width:80px">Escala</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
-              <tr><td colspan="3" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
+              <tr><td colspan="4" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
             } @else {
               @for (op of opRows(); track op['id']) {
                 <tr>
@@ -68,6 +69,10 @@ interface TableState extends ListParams {
                   <td style="text-align:center">
                     <input type="checkbox" [checked]="op['plenario_principal'] === true || op['plenario_principal'] === 1"
                       (change)="togglePlenario(op)" style="cursor:pointer; width:18px; height:18px">
+                  </td>
+                  <td style="text-align:center">
+                    <input type="checkbox" [checked]="op['participa_escala'] === true || op['participa_escala'] === 1"
+                      (change)="toggleEscala(op)" style="cursor:pointer; width:18px; height:18px">
                   </td>
                 </tr>
               }
@@ -216,6 +221,18 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: () => {
         alert('Erro ao alterar flag de plenário.');
+        this.loadOperadores();
+      },
+    });
+  }
+
+  toggleEscala(op: Record<string,unknown>): void {
+    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-escala`, {}).subscribe({
+      next: (res: any) => {
+        if (res.ok) op['participa_escala'] = res.participa_escala ? 1 : 0;
+      },
+      error: () => {
+        alert('Erro ao alterar flag de escala.');
         this.loadOperadores();
       },
     });

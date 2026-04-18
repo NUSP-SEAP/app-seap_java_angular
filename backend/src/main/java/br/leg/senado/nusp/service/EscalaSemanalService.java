@@ -36,6 +36,21 @@ public class EscalaSemanalService {
         return escalas.stream().map(this::toMap).collect(Collectors.toList());
     }
 
+    /** Paginado — retorna {data, meta} compatível com o PaginationComponent do frontend. */
+    public Map<String, Object> listarEscalasPaginado(int page, int limit) {
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 10;
+        var todas = listarEscalas();
+        int total = todas.size();
+        int pages = total == 0 ? 1 : (int) Math.ceil((double) total / limit);
+        int fromIdx = Math.min((page - 1) * limit, total);
+        int toIdx = Math.min(fromIdx + limit, total);
+        return Map.of(
+                "data", todas.subList(fromIdx, toIdx),
+                "meta", Map.of("page", page, "limit", limit, "total", total, "pages", pages)
+        );
+    }
+
     // ══ Obter escala com operadores ═════════════════════════════
 
     public Map<String, Object> obterEscala(Long id) {
@@ -152,6 +167,82 @@ public class EscalaSemanalService {
             }
         }
         return resultado;
+    }
+
+    // ══ Gerar escala automática (rodízio) ═══════════════════════
+
+    /**
+     * Gera uma escala por rodízio e persiste.
+     * Para cada plenário numerado (em ordem), escolhe 2 operadores participantes da escala
+     * com menor contagem de aparições nesse plenário no histórico. Empates são desempatados
+     * por sorteio aleatório.
+     */
+    @Transactional
+    public Map<String, Object> gerarEscalaRodizio(LocalDate dataInicio, LocalDate dataFim, String criadoPor) {
+        if (dataInicio == null || dataFim == null) {
+            throw new ServiceValidationException("Data início e data fim são obrigatórias.");
+        }
+        if (dataFim.isBefore(dataInicio)) {
+            throw new ServiceValidationException("Data fim não pode ser anterior à data início.");
+        }
+
+        // 1. Buscar operadores participantes
+        List<String> operadoresDisponiveis = new ArrayList<>(
+                operadorRepo.findParticipantesEscala().stream().map(o -> o.getId()).toList());
+        if (operadoresDisponiveis.isEmpty()) {
+            throw new ServiceValidationException("Nenhum operador marcado para participar da escala.");
+        }
+
+        // 2. Plenários numerados em ordem (P02, P03, P06, P07, P09, P13, P15, P19)
+        List<Integer> plenariosIds = salaRepo.findAtivasOrdenadas().stream()
+                .filter(s -> s.getNome() != null && s.getNome().matches("Plenário \\d+"))
+                .sorted(Comparator.comparingInt(s -> extrairNumero(s.getNome())))
+                .map(s -> s.getId())
+                .toList();
+
+        int slotsNecessarios = plenariosIds.size() * 2;
+        if (operadoresDisponiveis.size() < slotsNecessarios) {
+            throw new ServiceValidationException(
+                    "Operadores insuficientes: são necessários " + slotsNecessarios +
+                    " e há apenas " + operadoresDisponiveis.size() + " marcados.");
+        }
+
+        // 3. Carregar histórico agregado em memória: Map<operadorId, Map<salaId, count>>
+        Map<String, Map<Integer, Integer>> historico = new HashMap<>();
+        for (Object[] row : escalaOpRepo.countAparicoesPorOperadorSala()) {
+            String opId = (String) row[0];
+            int salaId = ((Number) row[1]).intValue();
+            int count = ((Number) row[2]).intValue();
+            historico.computeIfAbsent(opId, k -> new HashMap<>()).put(salaId, count);
+        }
+
+        // 4. Para cada plenário, escolher 2 operadores com menor count (empate → random)
+        Random random = new Random();
+        Map<Integer, List<String>> alocacao = new LinkedHashMap<>();
+
+        for (int salaId : plenariosIds) {
+            final int sId = salaId;
+            // Ordena operadores disponíveis por (count ASC, random tiebreak)
+            List<String> ordenados = new ArrayList<>(operadoresDisponiveis);
+            Collections.shuffle(ordenados, random);
+            ordenados.sort(Comparator.comparingInt(opId ->
+                    historico.getOrDefault(opId, Collections.emptyMap()).getOrDefault(sId, 0)));
+
+            List<String> escolhidos = new ArrayList<>(ordenados.subList(0, 2));
+            alocacao.put(salaId, escolhidos);
+            operadoresDisponiveis.removeAll(escolhidos);
+        }
+
+        // 5. Persistir a escala via o método existente (reaproveita validações + timestamps)
+        return salvarEscala(null, dataInicio, dataFim, alocacao, criadoPor);
+    }
+
+    private int extrairNumero(String nomeSala) {
+        try {
+            return Integer.parseInt(nomeSala.replaceAll("\\D+", ""));
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     // ══ Operadores escalados hoje (por sala) ══════════════════

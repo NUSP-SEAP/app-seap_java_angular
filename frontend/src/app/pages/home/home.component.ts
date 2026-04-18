@@ -9,6 +9,9 @@ import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 
+interface EscalaResumoItem { sala_nome: string; operadores: string; }
+interface EscalaResumoRow { left: EscalaResumoItem; right: EscalaResumoItem | null; }
+
 interface TableState extends ListParams {
   page: number;
   limit: number;
@@ -43,6 +46,74 @@ interface TableState extends ListParams {
         </a>
       }
     </div>
+
+    <!-- ═══ Escala Semanal ═══ -->
+    <section class="escala-section">
+      <h2>Escala</h2>
+
+      @if (escalaLoading() && escalas().length === 0) {
+        <p class="text-muted-sm">Carregando...</p>
+      } @else if (escalas().length === 0) {
+        <p class="text-muted-sm">Nenhuma escala cadastrada.</p>
+      } @else {
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:30px"></th>
+                <th>Período</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (esc of escalas(); track esc['id']) {
+                <tr>
+                  <td><button class="btn-toggle" (click)="toggleEscala(esc)"
+                    >{{ esc['_expanded'] ? '\u25BC' : '\u25B6' }}</button></td>
+                  <td><strong>{{ esc['data_inicio'] | fmtDate }} — {{ esc['data_fim'] | fmtDate }}</strong></td>
+                  <td>{{ esc['criado_em'] | fmtDate }}</td>
+                </tr>
+                @if (esc['_expanded']) {
+                  <tr class="accordion-row">
+                    <td colspan="3">
+                      @if (!esc['_resumoRows']) {
+                        <p class="text-muted-sm">Carregando...</p>
+                      } @else if (asEscalaRows(esc['_resumoRows']).length === 0) {
+                        <p class="text-muted-sm">Nenhum operador escalado.</p>
+                      } @else {
+                        <table class="sub-table escala-sub-table">
+                          <thead><tr>
+                            <th>Sala</th><th>Operadores</th>
+                            <th>Sala</th><th>Operadores</th>
+                          </tr></thead>
+                          <tbody>
+                            @for (row of asEscalaRows(esc['_resumoRows']); track $index) {
+                              <tr>
+                                <td><strong>{{ row.left.sala_nome }}</strong></td>
+                                <td>{{ row.left.operadores }}</td>
+                                @if (row.right) {
+                                  <td><strong>{{ row.right.sala_nome }}</strong></td>
+                                  <td>{{ row.right.operadores }}</td>
+                                } @else {
+                                  <td></td><td></td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pagination [meta]="escalaMeta()!"
+          (pageChange)="escalaState.page = $event; loadEscalas()"
+          (limitChange)="escalaState.limit = $event; escalaState.page = 1; loadEscalas()" />
+      }
+    </section>
 
     <!-- ═══ Meus Checklists ═══ -->
     <section>
@@ -180,6 +251,12 @@ interface TableState extends ListParams {
       font-weight: 700;
       &:hover { background: #fee2e2; }
     }
+    .escala-section { margin-bottom: 32px; }
+    .escala-sub-table {
+      th, td { padding: 6px 12px; }
+      th:nth-child(3) { border-left: 2px solid var(--border); }
+      td:nth-child(3) { border-left: 2px solid var(--border); }
+    }
   `],
 })
 export class HomeComponent implements OnInit {
@@ -204,6 +281,12 @@ export class HomeComponent implements OnInit {
   chkMeta = signal<PaginationMeta | null>(null);
   chkLoading = signal(true);
 
+  // ── Escala state ──
+  escalas = signal<Record<string, any>[]>([]);
+  escalaMeta = signal<PaginationMeta | null>(null);
+  escalaState = { page: 1, limit: 10 };
+  escalaLoading = signal(true);
+
   // ── Operações state ──
   opState: TableState = { page: 1, limit: 10, sort: 'data', direction: 'desc' };
   opFilters: Record<string, ColumnFilterState> = {};
@@ -213,8 +296,9 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.auth.user()) {
-      this.auth.whoAmI().subscribe(() => { this.loadChecklists(); this.loadOperacoes(); });
+      this.auth.whoAmI().subscribe(() => { this.loadEscalas(); this.loadChecklists(); this.loadOperacoes(); });
     } else {
+      this.loadEscalas();
       this.loadChecklists();
       this.loadOperacoes();
     }
@@ -302,6 +386,42 @@ export class HomeComponent implements OnInit {
   openAnormalidade(op: Record<string, unknown>): void {
     if (op['anormalidade_id']) window.open(`/anormalidade/detalhe?id=${op['anormalidade_id']}`, '_blank');
   }
+
+  // ── Escala ──
+
+  loadEscalas(): void {
+    this.escalaLoading.set(true);
+    this.api.getList('/api/escala/list', this.escalaState).subscribe({
+      next: (res: any) => {
+        this.escalas.set(res.data || []);
+        this.escalaMeta.set(res.meta || null);
+        this.escalaLoading.set(false);
+      },
+      error: () => { this.escalas.set([]); this.escalaMeta.set(null); this.escalaLoading.set(false); },
+    });
+  }
+
+  toggleEscala(esc: Record<string, any>): void {
+    esc['_expanded'] = !esc['_expanded'];
+    if (esc['_expanded'] && !esc['_resumoRows']) {
+      this.api.get<any>(`/api/escala/${esc['id']}`).subscribe({
+        next: (res: any) => {
+          const resumo: EscalaResumoItem[] = res.data?.resumo || [];
+          // Dividir em 2 metades para layout lado a lado
+          const half = Math.ceil(resumo.length / 2);
+          const rows: EscalaResumoRow[] = [];
+          for (let i = 0; i < half; i++) {
+            rows.push({ left: resumo[i], right: resumo[i + half] || null });
+          }
+          esc['_resumoRows'] = rows;
+          this.escalas.set([...this.escalas()]);
+        },
+        error: () => { esc['_resumoRows'] = []; this.escalas.set([...this.escalas()]); },
+      });
+    }
+  }
+
+  asEscalaRows(v: unknown): EscalaResumoRow[] { return Array.isArray(v) ? v : []; }
 
   // ── Helpers ──
 

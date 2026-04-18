@@ -37,9 +37,12 @@ public class LookupController {
      */
     @GetMapping("/operadores")
     public ResponseEntity<?> operadores() {
-        List<Map<String, String>> data = operadorRepository.findAllOrderByNomeCompleto()
+        List<Map<String, Object>> data = operadorRepository.findAllOrderByNomeCompleto()
                 .stream()
-                .map(o -> Map.of("id", o.getId(), "nome_completo", o.getNomeCompleto()))
+                .map(o -> Map.<String, Object>of(
+                        "id", o.getId(),
+                        "nome_completo", o.getNomeCompleto(),
+                        "participa_escala", Boolean.TRUE.equals(o.getParticipaEscala())))
                 .toList();
         return ResponseEntity.ok(Map.of("ok", true, "data", data));
     }

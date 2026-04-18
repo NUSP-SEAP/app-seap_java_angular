@@ -29,8 +29,11 @@ public class EscalaSemanalController {
     // ══ Admin — Listar ══════════════════════════════════════════
 
     @GetMapping("/api/admin/escala/list")
-    public ResponseEntity<?> listar() {
-        return ResponseEntity.ok(Map.of("ok", true, "data", escalaService.listarEscalas()));
+    public ResponseEntity<?> listar(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int limit) {
+        var r = escalaService.listarEscalasPaginado(page, limit);
+        return ResponseEntity.ok(Map.of("ok", true, "data", r.get("data"), "meta", r.get("meta")));
     }
 
     // ══ Admin — Obter ═══════════════════════════════════════════
@@ -76,11 +79,39 @@ public class EscalaSemanalController {
         return ResponseEntity.ok(Map.of("ok", true, "message", "Escala excluída com sucesso."));
     }
 
+    // ══ Admin — Gerar escala por rodízio ════════════════════════
+
+    @PostMapping("/api/admin/escala/rodizio")
+    public ResponseEntity<?> gerarRodizio(
+            @RequestBody Map<String, Object> payload,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        LocalDate dataInicio = LocalDate.parse(payload.get("data_inicio").toString());
+        LocalDate dataFim = LocalDate.parse(payload.get("data_fim").toString());
+        var result = escalaService.gerarEscalaRodizio(dataInicio, dataFim, principal.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("ok", true, "data", result));
+    }
+
     // ══ Admin — Operadores escalados hoje (por sala) ═════════════
 
     @GetMapping("/api/admin/escala/operadores-hoje")
     public ResponseEntity<?> operadoresHoje() {
         return ResponseEntity.ok(Map.of("ok", true, "data", escalaService.operadoresEscaladosHoje()));
+    }
+
+    // ══ Operador — Listar escalas (somente leitura) ══════════════
+
+    @GetMapping("/api/escala/list")
+    public ResponseEntity<?> listarParaOperador(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int limit) {
+        var r = escalaService.listarEscalasPaginado(page, limit);
+        return ResponseEntity.ok(Map.of("ok", true, "data", r.get("data"), "meta", r.get("meta")));
+    }
+
+    @GetMapping("/api/escala/{id}")
+    public ResponseEntity<?> obterParaOperador(@PathVariable Long id) {
+        return ResponseEntity.ok(Map.of("ok", true, "data", escalaService.obterEscala(id)));
     }
 
     // ══ Operador — Minha escala de hoje ═════════════════════════

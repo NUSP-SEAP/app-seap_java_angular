@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/001-baseline.yaml
   - include:
       file: db/changelog/002-escala-semanal.yaml
+  - include:
+      file: db/changelog/003-operador-participa-escala.yaml

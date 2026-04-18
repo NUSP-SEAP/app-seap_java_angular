@@ -21,6 +21,10 @@ public interface OperadorRepository extends JpaRepository<Operador, String> {
     @Query("SELECT o FROM Operador o WHERE o.plenarioPrincipal = true ORDER BY o.nomeCompleto ASC")
     List<Operador> findOperadoresPlenarioPrincipal();
 
+    /** Operadores que participam da escala semanal de comissões (rodízio) */
+    @Query("SELECT o FROM Operador o WHERE o.participaEscala = true ORDER BY o.nomeCompleto ASC")
+    List<Operador> findParticipantesEscala();
+
     /** Busca foto_url de um operador pelo id */
     @Query("SELECT o.fotoUrl FROM Operador o WHERE o.id = :id")
     Optional<String> findFotoUrlById(@Param("id") String id);

@@ -31,7 +31,7 @@ public class AdminDashboardService {
     public PagedResult listOperadores(int page, int limit, String search, String sort, String dir,
                                        Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
-                "o.ID, o.NOME_COMPLETO, o.EMAIL, o.PLENARIO_PRINCIPAL",
+                "o.ID, o.NOME_COMPLETO, o.EMAIL, o.PLENARIO_PRINCIPAL, o.PARTICIPA_ESCALA",
                 "FROM PES_OPERADOR o",
                 null, OP_SORT, List.of("o.NOME_COMPLETO", "o.EMAIL"),
                 Map.of("nome", "o.NOME_COMPLETO", "email", "o.EMAIL"),

@@ -16,13 +16,13 @@ interface Reuniao {
   tipo_presenca?: string;
   observacao_horario?: string;
   descricao?: string;
+  sala_id?: number;
 }
 
-interface EscalaItem {
-  sala_id: number;
-  sala_nome: string;
-  data_inicio: string;
-  data_fim: string;
+interface SalaAgenda {
+  id: number | null;  // null = plenário principal
+  nome: string;
+  plenario: boolean;
 }
 
 @Component({
@@ -35,97 +35,56 @@ interface EscalaItem {
       <a routerLink="/home" class="btn-voltar">Voltar</a>
     </div>
 
-    @if (loading()) {
-      <div class="card-custom">
-        <p class="text-muted-sm">Carregando agenda...</p>
-      </div>
-    } @else if (!temEscala() && !plenarioPrincipal()) {
-      <div class="card-custom">
-        <p class="text-muted-sm">Você não está escalado para nenhum plenário hoje.</p>
-      </div>
-    } @else {
+    <!-- Status da conexão -->
+    <div class="status-bar" [class.conectado]="sseConectado()" [class.desconectado]="!sseConectado()">
+      <span class="status-dot"></span>
+      {{ sseConectado() ? 'Conectado — atualizações em tempo real' : 'Reconectando...' }}
+      @if (ultimaAtualizacao()) {
+        <span class="last-update">Última atualização: {{ ultimaAtualizacao() }}</span>
+      }
+    </div>
 
-      <!-- Status da conexão -->
-      <div class="status-bar" [class.conectado]="sseConectado()" [class.desconectado]="!sseConectado()">
-        <span class="status-dot"></span>
-        {{ sseConectado() ? 'Conectado — atualizações em tempo real' : 'Reconectando...' }}
-        @if (ultimaAtualizacao()) {
-          <span class="last-update">Última atualização: {{ ultimaAtualizacao() }}</span>
+    @for (sala of salas; track sala.nome) {
+      <section class="agenda-section">
+        <h2 class="section-title">
+          <span class="section-icon">&#9679;</span>
+          {{ sala.nome }}
+        </h2>
+        @if (getReunioes(sala).length === 0) {
+          <div class="card-custom">
+            <p class="text-muted-sm">Nenhuma {{ sala.plenario ? 'sessão plenária agendada' : 'reunião agendada' }} para hoje.</p>
+          </div>
+        } @else {
+          @for (r of getReunioes(sala); track r.codigo) {
+            <div class="card-custom reuniao-card">
+              <div class="reuniao-header">
+                <span class="reuniao-horario">{{ r.horario }}</span>
+                <span class="reuniao-status" [class]="statusClass(r.situacao)">{{ r.situacao }}</span>
+              </div>
+              <div class="reuniao-titulo">
+                @if (r.comissao_sigla) {
+                  <span class="reuniao-sigla">{{ r.comissao_sigla }}</span>
+                }
+                {{ r.titulo }}
+              </div>
+              @if (r.comissao_nome) {
+                <div class="reuniao-comissao">{{ r.comissao_nome }}</div>
+              }
+              @if (r.descricao) {
+                <div class="reuniao-descricao">{{ r.descricao }}</div>
+              }
+              @if (r.observacao_horario) {
+                <div class="reuniao-descricao">{{ r.observacao_horario }}</div>
+              }
+              <div class="reuniao-meta">
+                @if (r.tipo_descricao) { <span>{{ r.tipo_descricao }}</span> }
+                @if (r.tipo_presenca) { <span>{{ r.tipo_presenca }}</span> }
+                <span>{{ r.local }}</span>
+              </div>
+            </div>
+          }
         }
-      </div>
-
-      <!-- Plenário Principal -->
-      @if (plenarioPrincipal()) {
-        <section class="agenda-section">
-          <h2 class="section-title">
-            <span class="section-icon">&#9679;</span>
-            Plenário Principal
-          </h2>
-          @if (reunioesPlenario().length === 0) {
-            <div class="card-custom">
-              <p class="text-muted-sm">Nenhuma sessão plenária agendada para hoje.</p>
-            </div>
-          } @else {
-            @for (r of reunioesPlenario(); track r.codigo) {
-              <div class="card-custom reuniao-card">
-                <div class="reuniao-header">
-                  <span class="reuniao-horario">{{ r.horario }}</span>
-                  <span class="reuniao-status" [class]="statusClass(r.situacao)">{{ r.situacao }}</span>
-                </div>
-                <div class="reuniao-titulo">{{ r.titulo }}</div>
-                @if (r.descricao) {
-                  <div class="reuniao-descricao">{{ r.descricao }}</div>
-                }
-                <div class="reuniao-meta">
-                  <span>{{ r.tipo_descricao }}</span>
-                  <span>{{ r.local }}</span>
-                </div>
-              </div>
-            }
-          }
-        </section>
-      }
-
-      <!-- Comissões (por sala escalada) -->
-      @for (escala of minhaEscala(); track escala.sala_id) {
-        <section class="agenda-section">
-          <h2 class="section-title">
-            <span class="section-icon">&#9679;</span>
-            {{ escala.sala_nome }}
-          </h2>
-          @if (getReunioesSala(escala.sala_id).length === 0) {
-            <div class="card-custom">
-              <p class="text-muted-sm">Nenhuma reunião agendada para este plenário hoje.</p>
-            </div>
-          } @else {
-            @for (r of getReunioesSala(escala.sala_id); track r.codigo) {
-              <div class="card-custom reuniao-card">
-                <div class="reuniao-header">
-                  <span class="reuniao-horario">{{ r.horario }}</span>
-                  <span class="reuniao-status" [class]="statusClass(r.situacao)">{{ r.situacao }}</span>
-                </div>
-                <div class="reuniao-titulo">
-                  @if (r.comissao_sigla) {
-                    <span class="reuniao-sigla">{{ r.comissao_sigla }}</span>
-                  }
-                  {{ r.titulo }}
-                </div>
-                @if (r.comissao_nome) {
-                  <div class="reuniao-comissao">{{ r.comissao_nome }}</div>
-                }
-                @if (r.observacao_horario) {
-                  <div class="reuniao-descricao">{{ r.observacao_horario }}</div>
-                }
-                <div class="reuniao-meta">
-                  @if (r.tipo_descricao) { <span>{{ r.tipo_descricao }}</span> }
-                  @if (r.tipo_presenca) { <span>{{ r.tipo_presenca }}</span> }
-                  <span>{{ r.local }}</span>
-                </div>
-              </div>
-            }
-          }
-        </section>
-      }
+      </section>
     }
   `,
   styles: [`
@@ -195,10 +154,18 @@ export class AgendaLegislativaComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private auth = inject(AuthService);
 
-  loading = signal(true);
-  plenarioPrincipal = signal(false);
-  minhaEscala = signal<EscalaItem[]>([]);
-  temEscala = signal(false);
+  // Plenário Principal + 8 numerados em ordem
+  salas: SalaAgenda[] = [
+    { id: null, nome: 'Plenário Principal', plenario: true },
+    { id: 3,  nome: 'Plenário 02', plenario: false },
+    { id: 4,  nome: 'Plenário 03', plenario: false },
+    { id: 5,  nome: 'Plenário 06', plenario: false },
+    { id: 6,  nome: 'Plenário 07', plenario: false },
+    { id: 7,  nome: 'Plenário 09', plenario: false },
+    { id: 8,  nome: 'Plenário 13', plenario: false },
+    { id: 9,  nome: 'Plenário 15', plenario: false },
+    { id: 10, nome: 'Plenário 19', plenario: false },
+  ];
 
   reunioesComissoes = signal<Reuniao[]>([]);
   reunioesPlenario = signal<Reuniao[]>([]);
@@ -208,27 +175,18 @@ export class AgendaLegislativaComponent implements OnInit, OnDestroy {
   private eventSources: EventSource[] = [];
 
   ngOnInit(): void {
-    // 1. Buscar escala do operador
-    this.api.get<any>('/api/escala/minha').subscribe({
-      next: (res: any) => {
-        const escala: EscalaItem[] = res.data || [];
-        const isPlenario = res.plenario_principal === true;
-
-        this.minhaEscala.set(escala);
-        this.plenarioPrincipal.set(isPlenario);
-        this.temEscala.set(escala.length > 0);
-        this.loading.set(false);
-
-        // 2. Conectar SSE para cada sala + plenário
-        if (isPlenario) this.conectarSSE(null, true);
-        for (const e of escala) this.conectarSSE(e.sala_id, false);
-
-        // Se não tem nada, pelo menos carregar dados REST
-        if (!isPlenario && escala.length === 0) return;
-        this.carregarDadosIniciais(escala, isPlenario);
-      },
-      error: () => { this.loading.set(false); },
+    // Carregar dados iniciais
+    this.api.get<any>('/api/agenda/plenario').subscribe({
+      next: (res: any) => this.reunioesPlenario.set(res.data || []),
     });
+    this.api.get<any>('/api/agenda/hoje').subscribe({
+      next: (res: any) => this.reunioesComissoes.set(res.data || []),
+    });
+
+    // SSE — plenário principal
+    this.conectarSSE(null, true);
+    // SSE — todas as comissões
+    this.conectarSSE(null, false);
   }
 
   ngOnDestroy(): void {
@@ -236,28 +194,14 @@ export class AgendaLegislativaComponent implements OnInit, OnDestroy {
     this.eventSources = [];
   }
 
-  carregarDadosIniciais(escala: EscalaItem[], isPlenario: boolean): void {
-    if (isPlenario) {
-      this.api.get<any>('/api/agenda/plenario').subscribe({
-        next: (res: any) => this.reunioesPlenario.set(res.data || []),
-      });
-    }
-    // Carregar comissões (todas de uma vez, filtrar no front)
-    if (escala.length > 0) {
-      this.api.get<any>('/api/agenda/hoje').subscribe({
-        next: (res: any) => this.reunioesComissoes.set(res.data || []),
-      });
-    }
-  }
-
-  getReunioesSala(salaId: number): Reuniao[] {
-    return this.reunioesComissoes().filter(r => (r as any)['sala_id'] === salaId);
+  getReunioes(sala: SalaAgenda): Reuniao[] {
+    if (sala.plenario) return this.reunioesPlenario();
+    return this.reunioesComissoes().filter(r => r.sala_id === sala.id);
   }
 
   conectarSSE(salaId: number | null, plenarioPrincipal: boolean): void {
     const token = this.auth.getToken();
     let url = `${environment.apiBaseUrl}/api/agenda/stream?`;
-    if (salaId != null) url += `sala_id=${salaId}&`;
     if (plenarioPrincipal) url += `plenario_principal=true&`;
     url += `token=${token}`;
 
@@ -268,10 +212,6 @@ export class AgendaLegislativaComponent implements OnInit, OnDestroy {
       const data = JSON.parse(event.data);
       if (data.tipo === 'plenario_principal') {
         this.reunioesPlenario.set(data.reunioes || []);
-      } else if (data.tipo === 'comissao' && data.sala_id) {
-        // Atualizar reuniões desta sala no cache geral
-        const outras = this.reunioesComissoes().filter(r => (r as any)['sala_id'] !== data.sala_id);
-        this.reunioesComissoes.set([...outras, ...(data.reunioes || [])]);
       } else if (data.tipo === 'todas') {
         this.reunioesComissoes.set(data.reunioes || []);
       }
@@ -280,16 +220,12 @@ export class AgendaLegislativaComponent implements OnInit, OnDestroy {
     });
 
     es.onopen = () => this.sseConectado.set(true);
-    es.onerror = () => {
-      this.sseConectado.set(false);
-      // O EventSource reconecta automaticamente
-    };
+    es.onerror = () => this.sseConectado.set(false);
   }
 
   statusClass(situacao: string): string {
     if (!situacao) return '';
-    const s = situacao.toLowerCase().replace(/\s+/g, '-');
-    return `status-${s}`;
+    return `status-${situacao.toLowerCase().replace(/\s+/g, '-')}`;
   }
 
   private formatarHora(iso: string): string {

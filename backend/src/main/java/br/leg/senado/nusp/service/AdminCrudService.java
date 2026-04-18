@@ -457,6 +457,19 @@ public class AdminCrudService {
         return novo;
     }
 
+    // ══ Toggle Participa Escala ═══════════════════════════════════
+
+    @Transactional
+    public boolean toggleParticipaEscala(String operadorId) {
+        Operador op = operadorRepo.findById(operadorId)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        boolean novo = !Boolean.TRUE.equals(op.getParticipaEscala());
+        op.setParticipaEscala(novo);
+        operadorRepo.save(op);
+        return novo;
+    }
+
     // ══ Alterar Senha de Operador ════════════════════════════════
 
     @Transactional

@@ -93,6 +93,14 @@ public class AdminCrudController {
         return ResponseEntity.ok(Map.of("ok", true, "plenario_principal", novoValor));
     }
 
+    // ══ Toggle Participa Escala ═══════════════════════════════
+
+    @PatchMapping("/operador/{id}/toggle-escala")
+    public ResponseEntity<?> toggleEscala(@PathVariable String id) {
+        boolean novoValor = crudService.toggleParticipaEscala(id);
+        return ResponseEntity.ok(Map.of("ok", true, "participa_escala", novoValor));
+    }
+
     // ══ Form Edit — Listar ══════════════════════════════════════
 
     @GetMapping("/form-edit/{entidade}/list")

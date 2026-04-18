@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 
-export interface LookupItem { id: number | string; nome: string; nome_completo?: string; multi_operador?: boolean; }
+export interface LookupItem { id: number | string; nome: string; nome_completo?: string; multi_operador?: boolean; participa_escala?: boolean; }
 
 @Injectable({ providedIn: 'root' })
 export class LookupService {

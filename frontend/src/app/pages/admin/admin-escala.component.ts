@@ -4,11 +4,14 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { LookupService, LookupItem } from '../../core/services/lookup.service';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
+import { ToastService } from '../../shared/components/toast.component';
+import { PaginationComponent } from '../../shared/components/pagination.component';
+import { PaginationMeta } from '../../core/models/user.model';
 
 @Component({
   selector: 'app-admin-escala',
   standalone: true,
-  imports: [FormsModule, RouterLink, FmtDatePipe],
+  imports: [FormsModule, RouterLink, FmtDatePipe, PaginationComponent],
   template: `
     <h1>Escala Semanal</h1>
 
@@ -71,6 +74,9 @@ import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
             </tbody>
           </table>
         </div>
+        <app-pagination [meta]="escalasMeta()!"
+          (pageChange)="escalasState.page = $event; loadEscalas()"
+          (limitChange)="escalasState.limit = $event; escalasState.page = 1; loadEscalas()" />
       }
     </section>
 
@@ -119,6 +125,17 @@ import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
         @if (editandoId()) {
           <button class="btn-cancelar" (click)="cancelarEdicao()">Cancelar Edição</button>
         }
+        <!-- Botão "Gerar automaticamente" oculto temporariamente até considerar turnos (manhã/tarde) na distribuição -->
+        <!--
+        @if (!editandoId()) {
+          <button class="btn-secondary-custom" (click)="gerarRodizio()"
+            [disabled]="!dataInicio || !dataFim || salvando()"
+            title="Sistema distribui os 16 operadores nos 8 plenários automaticamente, priorizando os que menos foram escalados em cada plenário">
+            {{ salvando() ? 'Gerando...' : 'Gerar automaticamente' }}
+          </button>
+        }
+        -->
+
         <button class="btn-primary-custom" (click)="salvar()" [disabled]="salvando()">
           {{ salvando() ? 'Salvando...' : (editandoId() ? 'Atualizar' : 'Criar Escala') }}
         </button>
@@ -173,11 +190,19 @@ import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
       font-size:.9rem; transition:background .15s;
       &:hover { background:var(--row-hover); }
     }
+    .btn-secondary-custom {
+      background:#f2c94c; color:#003b63; border:1px solid #e0b52f;
+      border-radius:999px; padding:8px 20px; font-weight:600; cursor:pointer;
+      font-size:.9rem; transition:background .15s;
+      &:hover:not(:disabled) { background:#e6bf3f; }
+      &:disabled { opacity:.5; cursor:not-allowed; }
+    }
   `],
 })
 export class AdminEscalaComponent implements OnInit {
   private api = inject(ApiService);
   private lookup = inject(LookupService);
+  private toast = inject(ToastService);
 
   // Formulário
   dataInicio = '';
@@ -190,13 +215,15 @@ export class AdminEscalaComponent implements OnInit {
 
   // Dados
   escalas = signal<Record<string, any>[]>([]);
+  escalasMeta = signal<PaginationMeta | null>(null);
+  escalasState = { page: 1, limit: 10 };
   loading = signal(true);
 
   // Computed signals — reagem automaticamente ao lookup carregar
   salasNumeradas = computed(() =>
     this.lookup.salas().filter(s => /Plenário \d+/.test(s.nome))
   );
-  operadores = computed(() => this.lookup.operadores());
+  operadores = computed(() => this.lookup.operadores().filter(op => op.participa_escala === true));
 
   ngOnInit(): void {
     this.lookup.loadSalas();
@@ -206,12 +233,13 @@ export class AdminEscalaComponent implements OnInit {
 
   loadEscalas(): void {
     this.loading.set(true);
-    this.api.get<any>('/api/admin/escala/list').subscribe({
+    this.api.getList('/api/admin/escala/list', this.escalasState).subscribe({
       next: (res: any) => {
         this.escalas.set(res.data || []);
+        this.escalasMeta.set(res.meta || null);
         this.loading.set(false);
       },
-      error: () => { this.escalas.set([]); this.loading.set(false); },
+      error: () => { this.escalas.set([]); this.escalasMeta.set(null); this.loading.set(false); },
     });
   }
 
@@ -276,15 +304,36 @@ export class AdminEscalaComponent implements OnInit {
     };
     if (this.editandoId()) payload.id = this.editandoId();
 
+    const eraEdicao = this.editandoId() != null;
     this.api.post<any>('/api/admin/escala/save', payload).subscribe({
       next: () => {
         this.salvando.set(false);
         this.cancelarEdicao();
         this.loadEscalas();
+        this.toast.success(eraEdicao ? 'Escala atualizada com sucesso' : 'Escala criada com sucesso');
       },
       error: (err: any) => {
         this.salvando.set(false);
-        alert(err?.error?.message || 'Erro ao salvar escala.');
+        this.toast.error(err?.error?.message || 'Erro ao salvar escala.');
+      },
+    });
+  }
+
+  gerarRodizio(): void {
+    if (!this.dataInicio || !this.dataFim) return;
+    this.salvando.set(true);
+    this.api.post<any>('/api/admin/escala/rodizio', {
+      data_inicio: this.dataInicio, data_fim: this.dataFim,
+    }).subscribe({
+      next: () => {
+        this.salvando.set(false);
+        this.cancelarEdicao();
+        this.loadEscalas();
+        this.toast.success('Escala gerada automaticamente com sucesso');
+      },
+      error: (err: any) => {
+        this.salvando.set(false);
+        this.toast.error(err?.error?.message || 'Erro ao gerar escala automática.');
       },
     });
   }
