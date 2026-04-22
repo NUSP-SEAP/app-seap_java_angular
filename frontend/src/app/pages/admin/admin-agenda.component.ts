@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { environment } from '../../../environments/environment';
+import { hojeAgendaLabel } from '../../core/helpers/date.helpers';
 
 interface Reuniao {
   codigo: string;
@@ -30,7 +31,7 @@ interface SalaAgenda {
   standalone: true,
   imports: [RouterLink],
   template: `
-    <h1>Agenda Legislativa</h1>
+    <h1>Agenda Legislativa - {{ hojeLabel }}</h1>
     <a routerLink="/admin" class="back-link">&larr; Voltar ao Painel</a>
 
     <!-- Status da conexão -->
@@ -146,6 +147,8 @@ interface SalaAgenda {
 export class AdminAgendaComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private auth = inject(AuthService);
+
+  readonly hojeLabel = hojeAgendaLabel();
 
   // Plenário Principal + 8 numerados em ordem
   salas: SalaAgenda[] = [

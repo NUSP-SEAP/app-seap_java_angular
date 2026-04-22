@@ -8,6 +8,7 @@ import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../..
 import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
+import { hojeDdMm } from '../../core/helpers/date.helpers';
 
 interface EscalaResumoItem { sala_nome: string; operadores: string; }
 interface EscalaResumoRow { left: EscalaResumoItem; right: EscalaResumoItem | null; }
@@ -36,7 +37,7 @@ interface TableState extends ListParams {
         <span class="text-muted-sm">Abrir</span>
       </a>
       <a routerLink="/agenda" class="card-custom card-link">
-        <strong>Agenda Legislativa</strong>
+        <strong>Agenda Legislativa - {{ hojeDdMm }}</strong>
         <span class="text-muted-sm">Abrir</span>
       </a>
       @if (auth.isAdmin()) {
@@ -262,6 +263,8 @@ interface TableState extends ListParams {
 export class HomeComponent implements OnInit {
   auth = inject(AuthService);
   private api = inject(ApiService);
+
+  readonly hojeDdMm = hojeDdMm();
 
   // ── Column defs ──
   chkCols: ColumnFilterDef[] = [

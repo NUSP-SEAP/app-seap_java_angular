@@ -8,6 +8,7 @@ import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../..
 import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
+import { hojeDdMm } from '../../core/helpers/date.helpers';
 
 interface TableState extends ListParams {
   page: number; limit: number; sort: string; direction: string; search: string;
@@ -27,7 +28,7 @@ interface TableState extends ListParams {
       <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
       <a routerLink="/admin/operacoes" class="card-custom card-link">Operações de Áudio</a>
       <a routerLink="/admin/form-edit" class="card-custom card-link">Edição de Formulários</a>
-      <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa</a>
+      <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa - {{ hojeDdMm }}</a>
     </div>
 
     <!-- ═══ Operadores ═══ -->
@@ -188,6 +189,8 @@ interface TableState extends ListParams {
 export class AdminDashboardComponent implements OnInit {
   private api = inject(ApiService);
   private debounceOp: any; private debounceChk: any;
+
+  readonly hojeDdMm = hojeDdMm();
 
   // ── Column definitions ──
   opCols: ColumnFilterDef[] = [
