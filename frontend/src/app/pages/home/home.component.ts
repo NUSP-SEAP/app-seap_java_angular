@@ -10,7 +10,7 @@ import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 import { hojeDdMm } from '../../core/helpers/date.helpers';
 
-interface EscalaResumoItem { sala_nome: string; operadores: string; }
+interface EscalaResumoItem { sala_nome: string; operadores: string; operadores_ids: string[]; }
 interface EscalaResumoRow { left: EscalaResumoItem; right: EscalaResumoItem | null; }
 
 interface TableState extends ListParams {
@@ -68,9 +68,8 @@ interface TableState extends ListParams {
             </thead>
             <tbody>
               @for (esc of escalas(); track esc['id']) {
-                <tr>
-                  <td><button class="btn-toggle" (click)="toggleEscala(esc)"
-                    >{{ esc['_expanded'] ? '\u25BC' : '\u25B6' }}</button></td>
+                <tr class="escala-row" (click)="toggleEscala(esc)">
+                  <td>{{ esc['_expanded'] ? '\u25BC' : '\u25B6' }}</td>
                   <td><strong>{{ esc['data_inicio'] | fmtDate }} — {{ esc['data_fim'] | fmtDate }}</strong></td>
                   <td>{{ esc['criado_em'] | fmtDate }}</td>
                 </tr>
@@ -91,10 +90,18 @@ interface TableState extends ListParams {
                             @for (row of asEscalaRows(esc['_resumoRows']); track $index) {
                               <tr>
                                 <td><strong>{{ row.left.sala_nome }}</strong></td>
-                                <td>{{ row.left.operadores }}</td>
+                                <td>
+                                  @for (nome of splitNomes(row.left.operadores); track $index; let last = $last) {
+                                    <span [class.operador-destaque]="ehUsuarioLogado(row.left, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                  }
+                                </td>
                                 @if (row.right) {
                                   <td><strong>{{ row.right.sala_nome }}</strong></td>
-                                  <td>{{ row.right.operadores }}</td>
+                                  <td>
+                                    @for (nome of splitNomes(row.right!.operadores); track $index; let last = $last) {
+                                      <span [class.operador-destaque]="ehUsuarioLogado(row.right!, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                    }
+                                  </td>
                                 } @else {
                                   <td></td><td></td>
                                 }
@@ -253,6 +260,9 @@ interface TableState extends ListParams {
       &:hover { background: #fee2e2; }
     }
     .escala-section { margin-bottom: 32px; }
+    .escala-row { cursor: pointer; }
+    .escala-row:hover { background: var(--bg-hover, #f1f5f9); }
+    .operador-destaque { font-weight: bold; color: var(--color-blue, #003b63); }
     .escala-sub-table {
       th, td { padding: 6px 12px; }
       th:nth-child(3) { border-left: 2px solid var(--border); }
@@ -425,6 +435,15 @@ export class HomeComponent implements OnInit {
   }
 
   asEscalaRows(v: unknown): EscalaResumoRow[] { return Array.isArray(v) ? v : []; }
+
+  splitNomes(operadores: string): string[] {
+    return (operadores || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  ehUsuarioLogado(item: EscalaResumoItem, idx: number): boolean {
+    const userId = this.auth.user()?.id;
+    return !!userId && item.operadores_ids?.[idx] === userId;
+  }
 
   // ── Helpers ──
 

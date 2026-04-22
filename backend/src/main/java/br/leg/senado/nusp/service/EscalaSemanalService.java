@@ -73,12 +73,17 @@ public class EscalaSemanalService {
             var ops = porSala.get(sala.getId());
             if (ops == null || ops.isEmpty()) continue;
             List<String> nomes = new ArrayList<>();
+            List<String> ids = new ArrayList<>();
             for (String opId : ops) {
-                operadorRepo.findById(opId).ifPresent(op -> nomes.add(op.getNomeExibicao()));
+                operadorRepo.findById(opId).ifPresent(op -> {
+                    nomes.add(op.getNomeExibicao());
+                    ids.add(op.getId());
+                });
             }
             resumo.add(Map.of(
                     "sala_nome", sala.getNome(),
-                    "operadores", String.join(", ", nomes)
+                    "operadores", String.join(", ", nomes),
+                    "operadores_ids", ids
             ));
         }
         result.put("resumo", resumo);
