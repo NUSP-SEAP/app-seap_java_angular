@@ -59,8 +59,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain chain) throws ServletException, IOException {
         String token = extractBearerToken(request);
 
-        if (token == null) {
-            // Tenta query param (para SSE — EventSource não suporta headers)
+        if (token == null && "/api/agenda/stream".equals(request.getServletPath())) {
+            // Fallback query param APENAS para SSE — EventSource não suporta headers.
+            // Restrito a este path para evitar vazamento do JWT em logs/Referer em outros endpoints.
             token = request.getParameter("token");
         }
 
