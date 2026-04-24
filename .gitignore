@@ -4,6 +4,7 @@
 !frontend/
 !docker/
 !.github/
+!.claude/
 !.dockerignore
 !.gitignore
 
