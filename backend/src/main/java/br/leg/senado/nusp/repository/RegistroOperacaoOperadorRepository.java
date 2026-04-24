@@ -59,6 +59,21 @@ public interface RegistroOperacaoOperadorRepository extends JpaRepository<Regist
     @Query("SELECT e.operadorId FROM RegistroOperacaoOperador e WHERE e.id = :entradaId")
     Optional<String> findOperadorIdByEntradaId(@Param("entradaId") long entradaId);
 
+    /**
+     * Verifica se o operador tem acesso a uma entrada — como dono principal
+     * (e.OPERADOR_ID) ou como co-operador via OPR_ENTRADA_OPERADOR (Plenário Principal).
+     * Retorna > 0 se houver acesso, 0 caso contrário.
+     */
+    @Query(value = """
+            SELECT COUNT(*) FROM OPR_REGISTRO_ENTRADA e
+            WHERE e.ID = :entradaId
+              AND (e.OPERADOR_ID = :operadorId
+                   OR EXISTS (SELECT 1 FROM OPR_ENTRADA_OPERADOR eo
+                              WHERE eo.ENTRADA_ID = e.ID AND eo.OPERADOR_ID = :operadorId))
+            """, nativeQuery = true)
+    int countOperadorAcessoEntrada(@Param("entradaId") long entradaId,
+                                    @Param("operadorId") String operadorId);
+
     /** Marca sala_editado se o valor mudou. */
     @Modifying @Transactional
     @Query(value = """

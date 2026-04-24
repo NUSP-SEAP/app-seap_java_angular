@@ -69,6 +69,7 @@ public class AdminCrudService {
 
         email = email.strip().toLowerCase();
         username = username.strip().toLowerCase();
+        validateUsername(username);
 
         boolean emailExists = operadorRepo.findByEmail(email).isPresent();
         boolean usernameExists = operadorRepo.findByUsername(username).isPresent();
@@ -138,6 +139,18 @@ public class AdminCrudService {
         return "jpg";
     }
 
+    // Rejeita caracteres que permitem path traversal ou confundem storage/URL.
+    private static final java.util.regex.Pattern USERNAME_PATTERN =
+            java.util.regex.Pattern.compile("^[a-z0-9._-]{3,64}$");
+
+    private static void validateUsername(String username) {
+        if (!USERNAME_PATTERN.matcher(username).matches()) {
+            throw new ServiceValidationException("invalid_username", HttpStatus.BAD_REQUEST,
+                    Map.of("message",
+                            "Username deve conter apenas letras minúsculas, números, ponto, traço ou underscore (3 a 64 caracteres)."));
+        }
+    }
+
     // ══ Criação de Administrador ════════════════════════════════
 
     @Transactional
@@ -160,6 +173,7 @@ public class AdminCrudService {
 
         email = email.strip().toLowerCase();
         username = username.strip().toLowerCase();
+        validateUsername(username);
 
         boolean emailExists = administradorRepo.findByEmail(email).isPresent();
         boolean usernameExists = administradorRepo.findByUsername(username).isPresent();

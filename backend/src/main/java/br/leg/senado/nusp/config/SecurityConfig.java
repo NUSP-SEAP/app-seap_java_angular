@@ -33,7 +33,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/login").permitAll()
                 .requestMatchers("/api/health").permitAll()
                 .requestMatchers("/api/auth/html-guard").permitAll()
-                .requestMatchers("/api/forms/lookup/**").permitAll()
                 .requestMatchers("/api/forms/checklist/itens-tipo").permitAll()
                 .requestMatchers("/api/password/**").permitAll()
                 .requestMatchers("/files/**").permitAll()

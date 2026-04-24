@@ -1,5 +1,6 @@
 package br.leg.senado.nusp.controller;
 
+import br.leg.senado.nusp.repository.RegistroOperacaoOperadorRepository;
 import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.AnormalidadeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +24,7 @@ import java.util.Map;
 public class AnormalidadeController {
 
     private final AnormalidadeService anormalidadeService;
+    private final RegistroOperacaoOperadorRepository entradaRepo;
 
     /**
      * GET /api/operacao/anormalidade/registro?entrada_id=...
@@ -32,6 +34,15 @@ public class AnormalidadeController {
     public ResponseEntity<?> buscarPorEntrada(
             @RequestParam("entrada_id") long entradaId,
             @AuthenticationPrincipal UserPrincipal principal) {
+
+        // Verifica existência da entrada (404 vs 403 para não vazar IDs)
+        String entradaOwner = entradaRepo.findOperadorIdByEntradaId(entradaId).orElse(null);
+        if (entradaOwner == null)
+            return ResponseEntity.status(404).body(Map.of("ok", false, "error", "not_found"));
+
+        // Ownership: dono principal OU co-operador em Plenário Principal (OPR_ENTRADA_OPERADOR)
+        if (entradaRepo.countOperadorAcessoEntrada(entradaId, principal.getId()) == 0)
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "forbidden"));
 
         Map<String, Object> data = anormalidadeService.buscarPorEntrada(entradaId);
         if (data == null)
