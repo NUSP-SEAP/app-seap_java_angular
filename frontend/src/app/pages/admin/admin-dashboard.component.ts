@@ -56,17 +56,24 @@ interface TableState extends ListParams {
                 [currentSort]="opState.sort" [currentDir]="opState.direction"
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
+            <th style="width:130px">Turno</th>
             <th style="width:120px">Op. Plenário</th>
             <th style="width:80px">Escala</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
-              <tr><td colspan="4" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
+              <tr><td colspan="5" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
             } @else {
               @for (op of opRows(); track op['id']) {
                 <tr>
                   <td><strong>{{ op['nome_completo'] || op['nome'] }}</strong></td>
                   <td>{{ op['email'] }}</td>
+                  <td class="turno-cell" style="text-align:center">
+                    <select [value]="op['turno'] || 'M'" (change)="setTurno(op, $any($event.target).value)" class="turno-select">
+                      <option value="M">Matutino</option>
+                      <option value="V">Vespertino</option>
+                    </select>
+                  </td>
                   <td style="text-align:center">
                     <input type="checkbox" [checked]="op['plenario_principal'] === true || op['plenario_principal'] === 1"
                       (change)="togglePlenario(op)" style="cursor:pointer; width:18px; height:18px">
@@ -184,6 +191,18 @@ interface TableState extends ListParams {
     .btn-xs-primary { background:var(--primary) !important; color:#fff !important; border-color:var(--primary) !important; }
     .btn-xs-primary:hover { background:var(--primary-hover) !important; }
     .btn-xs-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .turno-cell { padding: 4px 16px !important; }
+    .turno-select {
+      appearance: none; -webkit-appearance: none; -moz-appearance: none;
+      box-sizing: border-box; display: inline-block;
+      padding: 0 18px 0 6px; height: 20px; line-height: 18px; min-height: 0;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23475569'/></svg>") no-repeat right 6px center;
+      color: var(--text); font-size: .75rem; cursor: pointer;
+      vertical-align: middle;
+      &:hover { border-color: var(--primary); }
+      &:focus { outline: none; border-color: var(--primary); }
+    }
   `],
 })
 export class AdminDashboardComponent implements OnInit {
@@ -236,6 +255,18 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: () => {
         alert('Erro ao alterar flag de escala.');
+        this.loadOperadores();
+      },
+    });
+  }
+
+  setTurno(op: Record<string,unknown>, turno: string): void {
+    this.api.patch<any>(`/api/admin/operador/${op['id']}/turno`, { turno }).subscribe({
+      next: (res: any) => {
+        if (res.ok) op['turno'] = res.turno;
+      },
+      error: () => {
+        alert('Erro ao alterar turno do operador.');
         this.loadOperadores();
       },
     });

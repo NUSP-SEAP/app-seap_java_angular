@@ -38,6 +38,9 @@ public class Operador extends AuditableEntity {
     @Column(name = "PARTICIPA_ESCALA", nullable = false)
     private Boolean participaEscala = true;
 
+    @Column(name = "TURNO", nullable = false, length = 1)
+    private String turno = "M";
+
     /** Substitui extensão citext — armazena sempre em lowercase */
     public void setEmail(String email) {
         this.email = email != null ? email.toLowerCase() : null;

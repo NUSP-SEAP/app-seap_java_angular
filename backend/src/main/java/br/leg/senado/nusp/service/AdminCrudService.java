@@ -471,6 +471,22 @@ public class AdminCrudService {
         return novo;
     }
 
+    // ══ Atualizar Turno ═══════════════════════════════════════════
+
+    @Transactional
+    public String setTurnoOperador(String operadorId, String turno) {
+        if (!"M".equals(turno) && !"V".equals(turno)) {
+            throw new ServiceValidationException("TURNO_INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Turno deve ser 'M' (Matutino) ou 'V' (Vespertino)."));
+        }
+        Operador op = operadorRepo.findById(operadorId)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        op.setTurno(turno);
+        operadorRepo.save(op);
+        return turno;
+    }
+
     // ══ Toggle Participa Escala ═══════════════════════════════════
 
     @Transactional

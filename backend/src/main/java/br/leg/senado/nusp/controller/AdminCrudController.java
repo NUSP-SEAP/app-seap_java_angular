@@ -93,6 +93,14 @@ public class AdminCrudController {
         return ResponseEntity.ok(Map.of("ok", true, "plenario_principal", novoValor));
     }
 
+    // ══ Atualizar Turno ════════════════════════════════════════
+
+    @PatchMapping("/operador/{id}/turno")
+    public ResponseEntity<?> setTurno(@PathVariable String id, @RequestBody Map<String, String> body) {
+        String novoValor = crudService.setTurnoOperador(id, body.get("turno"));
+        return ResponseEntity.ok(Map.of("ok", true, "turno", novoValor));
+    }
+
     // ══ Toggle Participa Escala ═══════════════════════════════
 
     @PatchMapping("/operador/{id}/toggle-escala")
