@@ -194,7 +194,6 @@ public class OperacaoService {
      * Valida todas as regras de horário para uma entrada de operação (não multi-operador).
      * Chamado tanto na criação quanto na edição.
      *
-     * @param horarioPauta  horário da pauta (pode ser null)
      * @param horaInicio    início do evento (obrigatório)
      * @param horaEntrada   início da operação (obrigatório para ordem >= 2)
      * @param horaFim       término do evento (quando encerrado)
@@ -203,17 +202,9 @@ public class OperacaoService {
      * @param registroId    ID da sessão (para buscar operadores adjacentes)
      * @param entradaId     ID da entrada sendo editada (0 para criação)
      */
-    private void validarHorarios(String horarioPauta, String horaInicio,
+    private void validarHorarios(String horaInicio,
                                   String horaEntrada, String horaFim, String horaSaida,
                                   int ordem, long registroId, long entradaId) {
-        // Regra 1: Início do evento >= Horário da Pauta
-        if (horaInicio != null && horarioPauta != null) {
-            if (hm(horaInicio).compareTo(hm(horarioPauta)) < 0) {
-                throw new ServiceValidationException(
-                    "O início do evento não pode ser anterior ao horário da pauta (" + hm(horarioPauta) + ").");
-            }
-        }
-
         // Regra 5: hora_entrada obrigatório para ordem >= 2
         if (ordem >= 2 && (horaEntrada == null || horaEntrada.isBlank())) {
             throw new ServiceValidationException("O campo 'Início da operação' é obrigatório.");
@@ -369,7 +360,7 @@ public class OperacaoService {
             boolean isMultiOpInline = salaInline != null && Boolean.TRUE.equals(salaInline.getMultiOperador());
             if (!isMultiOpInline) {
                 int ordemInline = ((Number) entradaAtual.get("ordem")).intValue();
-                validarHorarios(horarioPauta, horaInicio, horaEntrada, horaFim, horaSaida,
+                validarHorarios(horaInicio, horaEntrada, horaFim, horaSaida,
                         ordemInline, registroId, entradaId);
             }
 
@@ -449,7 +440,7 @@ public class OperacaoService {
         Sala sala = salaRepo.findById(salaId).orElse(null);
         boolean isMultiOp = sala != null && Boolean.TRUE.equals(sala.getMultiOperador());
         if (!isMultiOp) {
-            validarHorarios(horarioPauta, horaInicio, horaEntrada, horaFim, horaSaida,
+            validarHorarios(horaInicio, horaEntrada, horaFim, horaSaida,
                     ordem, registroId, 0);
         }
 
@@ -596,7 +587,7 @@ public class OperacaoService {
                 "SELECT ORDEM FROM OPR_REGISTRO_ENTRADA WHERE ID = ?1")
                 .setParameter(1, entradaId).getResultList();
             int ordemAtual = !ordemResult.isEmpty() ? ((Number) ordemResult.get(0)).intValue() : 1;
-            validarHorarios(horarioPauta, horaInicio, horaEntrada, horarioTermino, horaSaida,
+            validarHorarios(horaInicio, horaEntrada, horarioTermino, horaSaida,
                     ordemAtual, registroId, entradaId);
         }
 

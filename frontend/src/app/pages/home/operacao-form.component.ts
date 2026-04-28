@@ -181,9 +181,6 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
             <div class="form-row">
               <label>Início do evento <span class="req">*</span> @if (editData()?.['horario_inicio_editado']) { <span class="badge-edited">editado</span> }</label>
               <input type="time" [(ngModel)]="horaInicio" name="hora_inicio" step="60" [disabled]="formDisabled()" [readonly]="isRO() || camposSessaoReadonly()" [class.field-ro]="isRO() || camposSessaoReadonly()" (change)="onHoraInicioChange()">
-              @if (erroHoraInicio) {
-                <p class="erro-hora-entrada">{{ erroHoraInicio }}</p>
-              }
             </div>
             <div class="form-row">
               <label>Início da operação @if (!horaEntradaReadonly()) { <span class="req">*</span> } @if (editData()?.['hora_entrada_editado']) { <span class="badge-edited">editado</span> }</label>
@@ -399,7 +396,6 @@ export class OperacaoFormComponent implements OnInit {
   houveAnormalidade = 'nao';
   eventoEncerrado = true;
   erroHoraEntrada = '';
-  erroHoraInicio = '';
   erroHoraFim = '';
   erroHoraSaida = '';
 
@@ -719,7 +715,6 @@ export class OperacaoFormComponent implements OnInit {
     this.horaEntrada = '';
     this.horaSaida = '';
     this.erroHoraEntrada = '';
-    this.erroHoraInicio = '';
     this.erroHoraFim = '';
     this.erroHoraSaida = '';
     this.usb01 = '';
@@ -733,7 +728,6 @@ export class OperacaoFormComponent implements OnInit {
   // ═══ SINCRONIZAÇÃO DE HORÁRIOS ═══
 
   revalidarTodosHorarios(): void {
-    this.validarHoraInicio();
     this.validarHoraEntrada();
     this.validarHoraFim();
     this.validarHoraSaida();
@@ -783,14 +777,6 @@ export class OperacaoFormComponent implements OnInit {
     if (heNorm < horaSaidaAnt) {
       const nome = anterior.operador_nome || 'anterior';
       this.erroHoraEntrada = `O horário de início da sua operação deve ser igual ou superior à ${horaSaidaAnt} (término da operação de ${nome})`;
-    }
-  }
-
-  validarHoraInicio(): void {
-    this.erroHoraInicio = '';
-    if (!this.horaInicio || !this.horarioPauta || this.isMultiOperador) return;
-    if (this.hm(this.horaInicio) < this.hm(this.horarioPauta)) {
-      this.erroHoraInicio = `O início do evento não pode ser anterior ao horário da pauta (${this.hm(this.horarioPauta)}).`;
     }
   }
 
@@ -881,7 +867,6 @@ export class OperacaoFormComponent implements OnInit {
       if (!this.eventoEncerrado && !this.horaSaida) { this.focusFirst('hora_saida'); return; }
       if (!this.horaEntradaReadonly() && !this.horaEntrada) { this.focusFirst('hora_entrada'); return; }
       if (this.erroHoraEntrada) { this.focusFirst('hora_entrada'); return; }
-      if (this.erroHoraInicio) { this.focusFirst('hora_inicio'); return; }
       if (this.erroHoraFim) { this.focusFirst('hora_fim'); return; }
       if (this.erroHoraSaida) { this.focusFirst('hora_saida'); return; }
     }
