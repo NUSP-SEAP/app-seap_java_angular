@@ -14,6 +14,7 @@ import { PaginationMeta } from '../../core/models/user.model';
   imports: [FormsModule, RouterLink, FmtDatePipe, PaginationComponent],
   template: `
     <h1>Escala Semanal</h1>
+    <a routerLink="/admin" class="back-link">&larr; Voltar ao Painel</a>
 
     <!-- ═══ ESCALAS EXISTENTES ═══ -->
     <section class="escalas-section">
@@ -84,79 +85,134 @@ import { PaginationMeta } from '../../core/models/user.model';
     <div class="card-custom form-card">
       <h2>{{ editandoId() ? 'Editar Escala' : 'Nova Escala' }}</h2>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label>Data início</label>
-          <input type="date" [(ngModel)]="dataInicio">
+      <div class="form-toolbar">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data início</label>
+            <input type="date" [(ngModel)]="dataInicio">
+          </div>
+          <div class="form-group">
+            <label>Data fim</label>
+            <input type="date" [(ngModel)]="dataFim">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Data fim</label>
-          <input type="date" [(ngModel)]="dataFim">
+
+        <div class="toolbar-actions">
+          @if (!editandoId()) {
+            <button class="btn-secondary-custom" (click)="gerarRodizio()"
+              [disabled]="!dataInicio || !dataFim || salvando()"
+              title="Rotaciona as vagas da última escala cadastrada conforme o ciclo 19→15→13→9→7→3→2→6">
+              {{ salvando() ? 'Gerando...' : 'Gerar automaticamente' }}
+            </button>
+          }
+
+          @if (editandoId()) {
+            <button class="btn-cancelar" (click)="cancelarEdicao()">Cancelar Edição</button>
+          }
+
+          <button class="btn-primary-custom" (click)="salvar()"
+            [disabled]="salvando() || !temAlgumaSelecao()"
+            [title]="temAlgumaSelecao() ? '' : 'Selecione ao menos um operador para criar a escala'">
+            {{ salvando() ? 'Salvando...' : (editandoId() ? 'Atualizar' : 'Criar Escala') }}
+          </button>
         </div>
       </div>
 
-      <!-- Plenários numerados -->
-      @for (sala of salasNumeradas(); track sala.id) {
+      <div id="escala-salas-editor" class="salas-editor" tabindex="-1">
+        @if (salaAtual(); as sala) {
+          <div class="plenario-section">
+            <div class="plenario-header">
+              <strong>{{ sala.nome }}</strong>
+              <div class="plenario-header-info">
+                <span class="plenario-counter">{{ salaAtualIndex() + 1 }} de {{ salasNumeradas().length }}</span>
+                <span class="badge-count">{{ getOperadoresSala(sala.id).length }} operador(es)</span>
+              </div>
+            </div>
+
+            <div class="operadores-grid">
+              @for (op of operadores(); track op.id) {
+                <label class="op-checkbox" [class.checked]="isSelected(sala.id, op.id)">
+                  <input type="checkbox"
+                    [checked]="isSelected(sala.id, op.id)"
+                    (change)="toggleOperador(sala.id, op.id)">
+                  <span>{{ op.nome_completo || op.nome }}</span>
+                  @if (getOutrosPlenarios(sala.id, op.id).length > 0) {
+                    <span class="badge-outros">{{ getOutrosPlenarios(sala.id, op.id).join(', ') }}</span>
+                  }
+                </label>
+              }
+            </div>
+          </div>
+
+          <div class="plenario-nav">
+            <button class="btn-cancelar" type="button" (click)="voltarPlenario()" [disabled]="salaAtualIndex() === 0">
+              &lt;- Voltar
+            </button>
+            <button class="btn-cancelar" type="button" (click)="avancarPlenario()" [disabled]="salaAtualIndex() >= salasNumeradas().length - 1">
+              Avançar -&gt;
+            </button>
+          </div>
+        } @else {
+          <p class="text-muted-sm">Nenhum plenário numerado encontrado.</p>
+        }
+      </div>
+
+      <!-- ═══ FUNÇÕES (Apoio às Comissões / Fechamento dos Plenários) ═══ -->
+      <div class="salas-editor funcoes-editor">
         <div class="plenario-section">
           <div class="plenario-header">
-            <strong>{{ sala.nome }}</strong>
-            <span class="badge-count">{{ getOperadoresSala(sala.id).length }} operador(es)</span>
+            <strong>{{ funcaoAtualLabel() }}</strong>
+            <div class="plenario-header-info">
+              <span class="plenario-counter">{{ funcaoAtualIndex() + 1 }} de {{ funcoesTipos.length }}</span>
+              <span class="badge-count">{{ getOperadoresFuncao(funcaoAtualTipo()).length }} operador(es)</span>
+            </div>
           </div>
 
           <div class="operadores-grid">
             @for (op of operadores(); track op.id) {
-              <label class="op-checkbox" [class.checked]="isSelected(sala.id, op.id)">
+              <label class="op-checkbox" [class.checked]="isFuncaoSelected(funcaoAtualTipo(), op.id)">
                 <input type="checkbox"
-                  [checked]="isSelected(sala.id, op.id)"
-                  (change)="toggleOperador(sala.id, op.id)">
+                  [checked]="isFuncaoSelected(funcaoAtualTipo(), op.id)"
+                  (change)="toggleOperadorFuncao(funcaoAtualTipo(), op.id)">
                 <span>{{ op.nome_completo || op.nome }}</span>
-                @if (getOutrosPlenarios(sala.id, op.id).length > 0) {
-                  <span class="badge-outros">{{ getOutrosPlenarios(sala.id, op.id).join(', ') }}</span>
-                }
               </label>
             }
           </div>
         </div>
-      }
 
-      <!-- Botões no final do formulário -->
-      <div class="form-footer">
-        <a routerLink="/admin" class="btn-cancelar">Voltar</a>
-        @if (editandoId()) {
-          <button class="btn-cancelar" (click)="cancelarEdicao()">Cancelar Edição</button>
-        }
-        <!-- Botão "Gerar automaticamente" oculto temporariamente até considerar turnos (manhã/tarde) na distribuição -->
-        <!--
-        @if (!editandoId()) {
-          <button class="btn-secondary-custom" (click)="gerarRodizio()"
-            [disabled]="!dataInicio || !dataFim || salvando()"
-            title="Sistema distribui os 16 operadores nos 8 plenários automaticamente, priorizando os que menos foram escalados em cada plenário">
-            {{ salvando() ? 'Gerando...' : 'Gerar automaticamente' }}
+        <div class="plenario-nav">
+          <button class="btn-cancelar" type="button" (click)="voltarFuncao()" [disabled]="funcaoAtualIndex() === 0">
+            &lt;- Voltar
           </button>
-        }
-        -->
-
-        <button class="btn-primary-custom" (click)="salvar()" [disabled]="salvando()">
-          {{ salvando() ? 'Salvando...' : (editandoId() ? 'Atualizar' : 'Criar Escala') }}
-        </button>
+          <button class="btn-cancelar" type="button" (click)="avancarFuncao()" [disabled]="funcaoAtualIndex() >= funcoesTipos.length - 1">
+            Avançar -&gt;
+          </button>
+        </div>
       </div>
+
     </div>
   `,
   styles: [`
     .form-card { margin-bottom:24px; }
-    .form-row { display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; }
+    .form-toolbar {
+      display:flex; justify-content:space-between; align-items:flex-end; gap:16px;
+      margin-bottom:20px; flex-wrap:wrap;
+    }
+    .form-row { display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; }
     .form-group { display:flex; flex-direction:column; gap:4px; }
     .form-group label { font-weight:600; font-size:.85rem; color:var(--muted); }
-    .form-footer {
-      display:flex; gap:10px; justify-content:flex-end; margin-top:20px;
-      padding-top:16px; border-top:1px solid var(--border);
-    }
+    .toolbar-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 
     .plenario-section {
       border:1px solid var(--border); border-radius:var(--radius);
       padding:12px 16px; margin-bottom:12px;
     }
+    .salas-editor:focus { outline:none; }
     .plenario-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .plenario-header-info { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+    .plenario-counter {
+      font-size:.8rem; color:var(--muted);
+    }
     .badge-count {
       font-size:.8rem; color:var(--muted); background:var(--table-header-bg);
       padding:2px 10px; border-radius:999px;
@@ -177,6 +233,10 @@ import { PaginationMeta } from '../../core/models/user.model';
       font-size:.7rem; color:var(--muted); opacity:.7;
       margin-left:auto; white-space:nowrap;
     }
+    .plenario-nav {
+      display:flex; justify-content:center; gap:12px; margin:4px 0 12px;
+    }
+    .funcoes-editor { margin-top:16px; }
 
     .escalas-section { margin-top:8px; }
     .btn-xs-danger {
@@ -189,6 +249,7 @@ import { PaginationMeta } from '../../core/models/user.model';
       border-radius:999px; padding:8px 20px; font-weight:600; cursor:pointer;
       font-size:.9rem; transition:background .15s;
       &:hover { background:var(--row-hover); }
+      &:disabled { opacity:.45; cursor:not-allowed; }
     }
     .btn-secondary-custom {
       background:#f2c94c; color:#003b63; border:1px solid #e0b52f;
@@ -196,6 +257,13 @@ import { PaginationMeta } from '../../core/models/user.model';
       font-size:.9rem; transition:background .15s;
       &:hover:not(:disabled) { background:#e6bf3f; }
       &:disabled { opacity:.5; cursor:not-allowed; }
+    }
+    @media (max-width: 640px) {
+      .form-toolbar { align-items:stretch; }
+      .form-row, .toolbar-actions { width:100%; }
+      .form-group { flex:1 1 140px; }
+      .toolbar-actions > button { flex:1 1 180px; }
+      .plenario-header { align-items:flex-start; gap:8px; }
     }
   `],
 })
@@ -212,6 +280,15 @@ export class AdminEscalaComponent implements OnInit {
 
   // Seleção: Map<sala_id, Set<operador_id>> — signal para trigger change detection
   selecao = signal(new Map<number, Set<string>>());
+  salaAtualIndex = signal(0);
+
+  // Funções (Apoio às Comissões, Fechamento dos Plenários)
+  readonly funcoesTipos = [
+    { tipo: 'APOIO_COMISSOES', label: 'Apoio às Comissões' },
+    { tipo: 'FECHAMENTO',      label: 'Fechamento dos Plenários' },
+  ] as const;
+  selecaoFuncao = signal(new Map<string, Set<string>>());
+  funcaoAtualIndex = signal(0);
 
   // Dados
   escalas = signal<Record<string, any>[]>([]);
@@ -223,6 +300,7 @@ export class AdminEscalaComponent implements OnInit {
   salasNumeradas = computed(() =>
     this.lookup.salas().filter(s => /Plenário \d+/.test(s.nome))
   );
+  salaAtual = computed(() => this.salasNumeradas()[this.salaAtualIndex()] || null);
   operadores = computed(() => this.lookup.operadores().filter(op => op.participa_escala === true));
 
   ngOnInit(): void {
@@ -263,6 +341,51 @@ export class AdminEscalaComponent implements OnInit {
     return Array.from(this.selecao().get(Number(salaId)) || []);
   }
 
+  voltarPlenario(): void {
+    this.salaAtualIndex.update(idx => Math.max(0, idx - 1));
+  }
+
+  avancarPlenario(): void {
+    this.salaAtualIndex.update(idx => Math.min(this.salasNumeradas().length - 1, idx + 1));
+  }
+
+  // ── Funções (Apoio / Fechamento) ──
+
+  funcaoAtualTipo(): string { return this.funcoesTipos[this.funcaoAtualIndex()].tipo; }
+  funcaoAtualLabel(): string { return this.funcoesTipos[this.funcaoAtualIndex()].label; }
+
+  isFuncaoSelected(tipo: string, opId: number | string): boolean {
+    return this.selecaoFuncao().get(tipo)?.has(String(opId)) ?? false;
+  }
+
+  toggleOperadorFuncao(tipo: string, opId: number | string): void {
+    const map = this.selecaoFuncao();
+    if (!map.has(tipo)) map.set(tipo, new Set());
+    const set = map.get(tipo)!;
+    const id = String(opId);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    this.selecaoFuncao.set(new Map(map));
+  }
+
+  getOperadoresFuncao(tipo: string): string[] {
+    return Array.from(this.selecaoFuncao().get(tipo) || []);
+  }
+
+  voltarFuncao(): void {
+    this.funcaoAtualIndex.update(idx => Math.max(0, idx - 1));
+  }
+
+  avancarFuncao(): void {
+    this.funcaoAtualIndex.update(idx => Math.min(this.funcoesTipos.length - 1, idx + 1));
+  }
+
+  /** True quando há pelo menos 1 operador selecionado em qualquer sala ou função. */
+  temAlgumaSelecao = computed(() => {
+    for (const ops of this.selecao().values()) if (ops.size > 0) return true;
+    for (const ops of this.selecaoFuncao().values()) if (ops.size > 0) return true;
+    return false;
+  });
+
   /** Retorna nomes abreviados dos outros plenários em que o operador já está selecionado */
   getOutrosPlenarios(salaIdAtual: number | string, opId: number | string): string[] {
     const id = String(opId);
@@ -297,10 +420,18 @@ export class AdminEscalaComponent implements OnInit {
       }
     }
 
+    const funcoes: Record<string, string[]> = {};
+    for (const [tipo, ops] of this.selecaoFuncao().entries()) {
+      if (ops.size > 0) {
+        funcoes[tipo] = Array.from(ops);
+      }
+    }
+
     const payload: any = {
       data_inicio: this.dataInicio,
       data_fim: this.dataFim,
       salas,
+      funcoes,
     };
     if (this.editandoId()) payload.id = this.editandoId();
 
@@ -322,18 +453,24 @@ export class AdminEscalaComponent implements OnInit {
   gerarRodizio(): void {
     if (!this.dataInicio || !this.dataFim) return;
     this.salvando.set(true);
-    this.api.post<any>('/api/admin/escala/rodizio', {
+    this.api.post<any>('/api/admin/escala/rodizio/preview', {
       data_inicio: this.dataInicio, data_fim: this.dataFim,
     }).subscribe({
-      next: () => {
+      next: (res: any) => {
         this.salvando.set(false);
-        this.cancelarEdicao();
-        this.loadEscalas();
-        this.toast.success('Escala gerada automaticamente com sucesso');
+        const novaSelecao = new Map<number, Set<string>>();
+        const salas = res.data?.salas || {};
+        for (const [salaId, ops] of Object.entries(salas)) {
+          novaSelecao.set(Number(salaId), new Set((ops as unknown[]).map(String)));
+        }
+        this.selecao.set(novaSelecao);
+        this.salaAtualIndex.set(0);
+        this.focarAreaSalas();
+        this.toast.success('Prévia gerada. Revise e clique em Criar Escala para salvar.');
       },
       error: (err: any) => {
         this.salvando.set(false);
-        this.toast.error(err?.error?.message || 'Erro ao gerar escala automática.');
+        this.toast.error(err?.error?.message || 'Erro ao gerar prévia da escala automática.');
       },
     });
   }
@@ -353,11 +490,26 @@ export class AdminEscalaComponent implements OnInit {
           novaSelecao.set(Number(salaId), new Set(ops as string[]));
         }
         this.selecao.set(novaSelecao);
+
+        const novaFuncao = new Map<string, Set<string>>();
+        const funcoes = data['funcoes'] || {};
+        for (const [tipo, ops] of Object.entries(funcoes)) {
+          novaFuncao.set(tipo, new Set(ops as string[]));
+        }
+        this.selecaoFuncao.set(novaFuncao);
       },
     });
 
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.focarAreaSalas();
+  }
+
+  private focarAreaSalas(): void {
+    window.setTimeout(() => {
+      const editor = document.getElementById('escala-salas-editor');
+      if (!editor) return;
+      editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      editor.focus({ preventScroll: true });
+    }, 0);
   }
 
   excluir(esc: Record<string, any>): void {
@@ -378,6 +530,9 @@ export class AdminEscalaComponent implements OnInit {
     this.dataInicio = '';
     this.dataFim = '';
     this.selecao.set(new Map());
+    this.selecaoFuncao.set(new Map());
+    this.salaAtualIndex.set(0);
+    this.funcaoAtualIndex.set(0);
   }
 
   toggleDetalhe(esc: Record<string, any>): void {

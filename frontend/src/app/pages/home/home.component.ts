@@ -12,6 +12,12 @@ import { hojeDdMm } from '../../core/helpers/date.helpers';
 
 interface EscalaResumoItem { sala_nome: string; operadores: string; operadores_ids: string[]; }
 interface EscalaResumoRow { left: EscalaResumoItem; right: EscalaResumoItem | null; }
+interface EscalaFuncoes { apoio: EscalaResumoItem | null; fechamento: EscalaResumoItem | null; }
+
+const FUNCAO_LABELS = {
+  apoio: 'Apoio às Comissões',
+  fechamento: 'Fechamento dos Plenários',
+} as const;
 
 interface TableState extends ListParams {
   page: number;
@@ -109,6 +115,32 @@ interface TableState extends ListParams {
                             }
                           </tbody>
                         </table>
+                        @if (temFuncoes(esc)) {
+                          <table class="sub-table escala-sub-table escala-funcoes-table">
+                            <thead><tr>
+                              <th>Apoio às Comissões</th>
+                              <th>Fechamento dos Plenários</th>
+                            </tr></thead>
+                            <tbody>
+                              <tr>
+                                <td>
+                                  @if (asFuncoes(esc['_funcoes'])?.apoio; as item) {
+                                    @for (nome of splitNomes(item.operadores); track $index; let last = $last) {
+                                      <span [class.operador-destaque]="ehUsuarioLogado(item, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                    }
+                                  }
+                                </td>
+                                <td>
+                                  @if (asFuncoes(esc['_funcoes'])?.fechamento; as item) {
+                                    @for (nome of splitNomes(item.operadores); track $index; let last = $last) {
+                                      <span [class.operador-destaque]="ehUsuarioLogado(item, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                    }
+                                  }
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        }
                       }
                     </td>
                   </tr>
@@ -268,6 +300,12 @@ interface TableState extends ListParams {
       th:nth-child(3) { border-left: 2px solid var(--border); }
       td:nth-child(3) { border-left: 2px solid var(--border); }
     }
+    .escala-funcoes-table {
+      margin-top: 12px;
+      th, td { width: 50%; text-align: center; }
+      th:nth-child(2), td:nth-child(2) { border-left: 2px solid var(--border); }
+      th:nth-child(3), td:nth-child(3) { border-left: none; }
+    }
   `],
 })
 export class HomeComponent implements OnInit {
@@ -420,18 +458,40 @@ export class HomeComponent implements OnInit {
       this.api.get<any>(`/api/escala/${esc['id']}`).subscribe({
         next: (res: any) => {
           const resumo: EscalaResumoItem[] = res.data?.resumo || [];
-          // Dividir em 2 metades para layout lado a lado
-          const half = Math.ceil(resumo.length / 2);
+          // Separar plenários (qualquer item que NÃO seja função) das duas funções
+          const plenarios = resumo.filter(r =>
+            r.sala_nome !== FUNCAO_LABELS.apoio && r.sala_nome !== FUNCAO_LABELS.fechamento);
+          const funcoes: EscalaFuncoes = {
+            apoio: resumo.find(r => r.sala_nome === FUNCAO_LABELS.apoio) || null,
+            fechamento: resumo.find(r => r.sala_nome === FUNCAO_LABELS.fechamento) || null,
+          };
+          // Dividir os plenários em 2 metades para layout lado a lado
+          const half = Math.ceil(plenarios.length / 2);
           const rows: EscalaResumoRow[] = [];
           for (let i = 0; i < half; i++) {
-            rows.push({ left: resumo[i], right: resumo[i + half] || null });
+            rows.push({ left: plenarios[i], right: plenarios[i + half] || null });
           }
           esc['_resumoRows'] = rows;
+          esc['_funcoes'] = funcoes;
           this.escalas.set([...this.escalas()]);
         },
-        error: () => { esc['_resumoRows'] = []; this.escalas.set([...this.escalas()]); },
+        error: () => {
+          esc['_resumoRows'] = [];
+          esc['_funcoes'] = { apoio: null, fechamento: null };
+          this.escalas.set([...this.escalas()]);
+        },
       });
     }
+  }
+
+  asFuncoes(v: unknown): EscalaFuncoes | null {
+    if (v && typeof v === 'object' && ('apoio' in v || 'fechamento' in v)) return v as EscalaFuncoes;
+    return null;
+  }
+
+  temFuncoes(esc: Record<string, any>): boolean {
+    const f = this.asFuncoes(esc['_funcoes']);
+    return !!f && (!!f.apoio || !!f.fechamento);
   }
 
   asEscalaRows(v: unknown): EscalaResumoRow[] { return Array.isArray(v) ? v : []; }

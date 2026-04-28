@@ -66,7 +66,19 @@ public class EscalaSemanalController {
             }
         }
 
-        var result = escalaService.salvarEscala(id, dataInicio, dataFim, salasOperadores, principal.getUsername());
+        // Converter funções: { "APOIO_COMISSOES": ["uuid1"], "FECHAMENTO": ["uuid2","uuid3"] }
+        Map<String, List<String>> funcoes = new LinkedHashMap<>();
+        Object funcoesRaw = payload.get("funcoes");
+        if (funcoesRaw instanceof Map<?, ?> funcoesMap) {
+            for (var entry : funcoesMap.entrySet()) {
+                String tipo = entry.getKey().toString();
+                @SuppressWarnings("unchecked")
+                List<String> ops = (List<String>) entry.getValue();
+                funcoes.put(tipo, ops);
+            }
+        }
+
+        var result = escalaService.salvarEscala(id, dataInicio, dataFim, salasOperadores, funcoes, principal.getUsername());
         HttpStatus status = id != null ? HttpStatus.OK : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(Map.of("ok", true, "data", result));
     }
@@ -80,6 +92,14 @@ public class EscalaSemanalController {
     }
 
     // ══ Admin — Gerar escala por rodízio ════════════════════════
+
+    @PostMapping("/api/admin/escala/rodizio/preview")
+    public ResponseEntity<?> previewRodizio(@RequestBody Map<String, Object> payload) {
+        LocalDate dataInicio = LocalDate.parse(payload.get("data_inicio").toString());
+        LocalDate dataFim = LocalDate.parse(payload.get("data_fim").toString());
+        var result = escalaService.gerarPreviaEscalaRodizio(dataInicio, dataFim);
+        return ResponseEntity.ok(Map.of("ok", true, "data", result));
+    }
 
     @PostMapping("/api/admin/escala/rodizio")
     public ResponseEntity<?> gerarRodizio(

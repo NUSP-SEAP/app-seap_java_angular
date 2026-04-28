@@ -22,4 +22,8 @@ public class EscalaOperador {
 
     @Column(name = "OPERADOR_ID", nullable = false)
     private String operadorId;
+
+    /** Turno do operador no momento em que a escala foi salva ('M' ou 'V'). */
+    @Column(name = "TURNO", nullable = false, length = 1)
+    private String turno = "M";
 }

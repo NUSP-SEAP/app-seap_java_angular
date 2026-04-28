@@ -17,4 +17,7 @@ public interface EscalaSemanalRepository extends JpaRepository<EscalaSemanal, Lo
     /** Escala vigente para uma data específica */
     @Query("SELECT e FROM EscalaSemanal e WHERE e.dataInicio <= :data AND e.dataFim >= :data ORDER BY e.id DESC")
     List<EscalaSemanal> findVigentesPorData(@Param("data") LocalDate data);
+
+    /** Escala imediatamente anterior a um novo período. */
+    Optional<EscalaSemanal> findFirstByDataFimBeforeOrderByDataFimDescDataInicioDescIdDesc(LocalDate dataInicio);
 }

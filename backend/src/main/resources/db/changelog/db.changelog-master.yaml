@@ -7,3 +7,7 @@ databaseChangeLog:
       file: db/changelog/003-operador-participa-escala.yaml
   - include:
       file: db/changelog/004-operador-turno.yaml
+  - include:
+      file: db/changelog/005-escala-operador-turno.yaml
+  - include:
+      file: db/changelog/006-escala-funcao.yaml

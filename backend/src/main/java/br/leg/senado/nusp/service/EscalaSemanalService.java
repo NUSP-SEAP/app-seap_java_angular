@@ -1,9 +1,11 @@
 package br.leg.senado.nusp.service;
 
+import br.leg.senado.nusp.entity.EscalaFuncao;
 import br.leg.senado.nusp.entity.EscalaOperador;
 import br.leg.senado.nusp.entity.EscalaSemanal;
 import br.leg.senado.nusp.exception.ServiceValidationException;
 import br.leg.senado.nusp.repository.AdministradorRepository;
+import br.leg.senado.nusp.repository.EscalaFuncaoRepository;
 import br.leg.senado.nusp.repository.EscalaOperadorRepository;
 import br.leg.senado.nusp.repository.EscalaSemanalRepository;
 import br.leg.senado.nusp.repository.OperadorRepository;
@@ -25,9 +27,13 @@ public class EscalaSemanalService {
 
     private final EscalaSemanalRepository escalaRepo;
     private final EscalaOperadorRepository escalaOpRepo;
+    private final EscalaFuncaoRepository escalaFuncaoRepo;
     private final SalaRepository salaRepo;
     private final OperadorRepository operadorRepo;
     private final AdministradorRepository adminRepo;
+
+    /** Tipos de função aceitos em OPR_ESCALA_FUNCAO. */
+    private static final Set<String> TIPOS_FUNCAO = Set.of("APOIO_COMISSOES", "FECHAMENTO");
 
     // ══ Listar escalas ══════════════════════════════════════════
 
@@ -66,6 +72,13 @@ public class EscalaSemanalService {
         }
         result.put("salas", porSala);
 
+        // Funções (Apoio às Comissões, Fechamento dos Plenários, ...)
+        Map<String, List<String>> porFuncao = new LinkedHashMap<>();
+        for (var f : escalaFuncaoRepo.findByEscalaId(id)) {
+            porFuncao.computeIfAbsent(f.getTipo(), k -> new ArrayList<>()).add(f.getOperadorId());
+        }
+        result.put("funcoes", porFuncao);
+
         // Resumo com nomes — para visualização expandida
         List<Map<String, Object>> resumo = new ArrayList<>();
         var salasOrdenadas = salaRepo.findAtivasOrdenadas();
@@ -86,15 +99,41 @@ public class EscalaSemanalService {
                     "operadores_ids", ids
             ));
         }
+        // Anexar funções ao resumo na ordem fixa: Apoio antes, Fechamento depois
+        adicionarFuncaoNoResumo(resumo, porFuncao, "APOIO_COMISSOES", "Apoio às Comissões");
+        adicionarFuncaoNoResumo(resumo, porFuncao, "FECHAMENTO", "Fechamento dos Plenários");
+
         result.put("resumo", resumo);
         return result;
+    }
+
+    private void adicionarFuncaoNoResumo(List<Map<String, Object>> resumo,
+                                         Map<String, List<String>> porFuncao,
+                                         String tipo, String label) {
+        var ops = porFuncao.get(tipo);
+        if (ops == null || ops.isEmpty()) return;
+        List<String> nomes = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
+        for (String opId : ops) {
+            operadorRepo.findById(opId).ifPresent(op -> {
+                nomes.add(op.getNomeExibicao());
+                ids.add(op.getId());
+            });
+        }
+        resumo.add(Map.of(
+                "sala_nome", label,
+                "operadores", String.join(", ", nomes),
+                "operadores_ids", ids
+        ));
     }
 
     // ══ Criar/Atualizar escala ══════════════════════════════════
 
     @Transactional
     public Map<String, Object> salvarEscala(Long id, LocalDate dataInicio, LocalDate dataFim,
-                                            Map<Integer, List<String>> salasOperadores, String criadoPor) {
+                                            Map<Integer, List<String>> salasOperadores,
+                                            Map<String, List<String>> funcoes,
+                                            String criadoPor) {
         if (dataInicio == null || dataFim == null) {
             throw new ServiceValidationException("Data início e data fim são obrigatórias.");
         }
@@ -115,7 +154,7 @@ public class EscalaSemanalService {
         escala.setDataFim(dataFim);
         escala = escalaRepo.save(escala);
 
-        // Recriar vínculos
+        // Recriar vínculos de sala
         escalaOpRepo.deleteByEscalaId(escala.getId());
         if (salasOperadores != null) {
             for (var entry : salasOperadores.entrySet()) {
@@ -125,7 +164,29 @@ public class EscalaSemanalService {
                     eo.setEscalaId(escala.getId());
                     eo.setSalaId(salaId);
                     eo.setOperadorId(operadorId);
+                    // Snapshot do turno atual do operador no momento da escala
+                    eo.setTurno(operadorRepo.findById(operadorId)
+                            .map(o -> o.getTurno() != null ? o.getTurno() : "M")
+                            .orElse("M"));
                     escalaOpRepo.save(eo);
+                }
+            }
+        }
+
+        // Recriar vínculos de função (Apoio, Fechamento, etc.)
+        escalaFuncaoRepo.deleteByEscalaId(escala.getId());
+        if (funcoes != null) {
+            for (var entry : funcoes.entrySet()) {
+                String tipo = entry.getKey();
+                if (!TIPOS_FUNCAO.contains(tipo)) {
+                    throw new ServiceValidationException("Tipo de função inválido: " + tipo);
+                }
+                for (String operadorId : entry.getValue()) {
+                    var ef = new EscalaFuncao();
+                    ef.setEscalaId(escala.getId());
+                    ef.setTipo(tipo);
+                    ef.setOperadorId(operadorId);
+                    escalaFuncaoRepo.save(ef);
                 }
             }
         }
@@ -174,16 +235,33 @@ public class EscalaSemanalService {
         return resultado;
     }
 
-    // ══ Gerar escala automática (rodízio) ═══════════════════════
+    // ══ Gerar escala automática (rodízio por vagas) ══════════════
+
+    /** Ordem do ciclo: cada plenário rotaciona para o seguinte da lista (último volta ao primeiro). */
+    private static final String[] CICLO_NOMES = {
+            "Plenário 19", "Plenário 15", "Plenário 13", "Plenário 09",
+            "Plenário 07", "Plenário 03", "Plenário 02", "Plenário 06"
+    };
 
     /**
-     * Gera uma escala por rodízio e persiste.
-     * Para cada plenário numerado (em ordem), escolhe 2 operadores participantes da escala
-     * com menor contagem de aparições nesse plenário no histórico. Empates são desempatados
-     * por sorteio aleatório.
+     * Gera escala por rodízio cíclico das vagas.
+     * Cada vaga (sala + slot M/V) na escala anterior rotaciona para a próxima sala do ciclo,
+     * mantendo seu ocupante. Operadores que mudaram de turno ou saíram da escala liberam vaga,
+     * que é preenchida por entrantes/operadores que mudaram para o turno daquela vaga.
+     * Slots vazios na escala anterior continuam vazios após a rotação.
      */
     @Transactional
     public Map<String, Object> gerarEscalaRodizio(LocalDate dataInicio, LocalDate dataFim, String criadoPor) {
+        Map<Integer, List<String>> salasOperadores = gerarMapaRodizio(dataInicio, dataFim);
+        return salvarEscala(null, dataInicio, dataFim, salasOperadores, null, criadoPor);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> gerarPreviaEscalaRodizio(LocalDate dataInicio, LocalDate dataFim) {
+        return Map.of("salas", gerarMapaRodizio(dataInicio, dataFim));
+    }
+
+    private Map<Integer, List<String>> gerarMapaRodizio(LocalDate dataInicio, LocalDate dataFim) {
         if (dataInicio == null || dataFim == null) {
             throw new ServiceValidationException("Data início e data fim são obrigatórias.");
         }
@@ -191,63 +269,131 @@ public class EscalaSemanalService {
             throw new ServiceValidationException("Data fim não pode ser anterior à data início.");
         }
 
-        // 1. Buscar operadores participantes
-        List<String> operadoresDisponiveis = new ArrayList<>(
-                operadorRepo.findParticipantesEscala().stream().map(o -> o.getId()).toList());
-        if (operadoresDisponiveis.isEmpty()) {
-            throw new ServiceValidationException("Nenhum operador marcado para participar da escala.");
+        // 1. Validar contagem por turno
+        var participantes = operadorRepo.findParticipantesEscala();
+        List<String> partM = new ArrayList<>();
+        List<String> partV = new ArrayList<>();
+        Map<String, String> turnoAtual = new HashMap<>();
+        for (var op : participantes) {
+            turnoAtual.put(op.getId(), op.getTurno());
+            if ("M".equals(op.getTurno())) partM.add(op.getId());
+            else if ("V".equals(op.getTurno())) partV.add(op.getId());
+        }
+        if (partM.size() > 8) {
+            throw new ServiceValidationException("Há " + partM.size() +
+                    " operadores no turno Matutino, máximo 8. Ajuste antes de gerar a escala.");
+        }
+        if (partV.size() > 8) {
+            throw new ServiceValidationException("Há " + partV.size() +
+                    " operadores no turno Vespertino, máximo 8. Ajuste antes de gerar a escala.");
+        }
+        Set<String> participantesIds = turnoAtual.keySet();
+
+        // 2. Resolver IDs das salas do ciclo
+        Map<String, Integer> nomeParaId = new HashMap<>();
+        for (var s : salaRepo.findAtivasOrdenadas()) {
+            if (s.getNome() != null) nomeParaId.put(s.getNome(), s.getId());
+        }
+        List<Integer> ciclo = new ArrayList<>();
+        for (String nome : CICLO_NOMES) {
+            Integer id = nomeParaId.get(nome);
+            if (id == null) throw new ServiceValidationException("Sala '" + nome + "' não encontrada.");
+            ciclo.add(id);
         }
 
-        // 2. Plenários numerados em ordem (P02, P03, P06, P07, P09, P13, P15, P19)
-        List<Integer> plenariosIds = salaRepo.findAtivasOrdenadas().stream()
-                .filter(s -> s.getNome() != null && s.getNome().matches("Plenário \\d+"))
-                .sorted(Comparator.comparingInt(s -> extrairNumero(s.getNome())))
-                .map(s -> s.getId())
-                .toList();
+        // 3. Buscar a escala imediatamente anterior ao novo período
+        EscalaSemanal escalaAnterior = escalaRepo
+                .findFirstByDataFimBeforeOrderByDataFimDescDataInicioDescIdDesc(dataInicio)
+                .orElse(null);
 
-        int slotsNecessarios = plenariosIds.size() * 2;
-        if (operadoresDisponiveis.size() < slotsNecessarios) {
-            throw new ServiceValidationException(
-                    "Operadores insuficientes: são necessários " + slotsNecessarios +
-                    " e há apenas " + operadoresDisponiveis.size() + " marcados.");
+        // Estrutura: Map<salaId, Map<"M"/"V", operadorId|null>>
+        Map<Integer, Map<String, String>> base = inicializarSlots(ciclo);
+
+        if (escalaAnterior == null) {
+            // INICIALIZAÇÃO ALEATÓRIA — sem histórico, distribui aleatoriamente
+            // respeitando 1M+1V por sala (slots ficam vazios se faltar gente em algum turno)
+            Random rnd = new Random();
+            List<String> shM = new ArrayList<>(partM); Collections.shuffle(shM, rnd);
+            List<String> shV = new ArrayList<>(partV); Collections.shuffle(shV, rnd);
+            Iterator<String> itM = shM.iterator();
+            Iterator<String> itV = shV.iterator();
+            for (int sId : ciclo) {
+                if (itM.hasNext()) base.get(sId).put("M", itM.next());
+                if (itV.hasNext()) base.get(sId).put("V", itV.next());
+            }
+        } else {
+            // MODO ROTAÇÃO — pega vagas da anterior, ajusta, depois rotaciona
+            Map<Integer, Map<String, String>> ant = inicializarSlots(ciclo);
+            for (var v : escalaOpRepo.findByEscalaId(escalaAnterior.getId())) {
+                var slots = ant.get(v.getSalaId());
+                if (slots != null) slots.put(v.getTurno(), v.getOperadorId());
+            }
+
+            // Vagas que se mantêm: operador continua participando E mantém o mesmo turno
+            for (int sId : ciclo) {
+                for (String slot : List.of("M", "V")) {
+                    String opId = ant.get(sId).get(slot);
+                    if (opId == null) continue;
+                    if (!participantesIds.contains(opId)) continue;
+                    if (!slot.equals(turnoAtual.get(opId))) continue;
+                    base.get(sId).put(slot, opId);
+                }
+            }
+
+            // Operadores ainda não alocados (entrantes + os que mudaram de turno)
+            Set<String> jaAlocados = new HashSet<>();
+            for (var slots : base.values())
+                for (String op : slots.values()) if (op != null) jaAlocados.add(op);
+
+            Random rnd = new Random();
+            List<String> dispM = new ArrayList<>(partM); dispM.removeAll(jaAlocados); Collections.shuffle(dispM, rnd);
+            List<String> dispV = new ArrayList<>(partV); dispV.removeAll(jaAlocados); Collections.shuffle(dispV, rnd);
+
+            // Preencher vagas órfãs (na escala anterior virtual) com os disponíveis
+            for (int sId : ciclo) {
+                if (base.get(sId).get("M") == null && !dispM.isEmpty()) {
+                    base.get(sId).put("M", dispM.remove(0));
+                }
+                if (base.get(sId).get("V") == null && !dispV.isEmpty()) {
+                    base.get(sId).put("V", dispV.remove(0));
+                }
+            }
+
+            // Aplicar rotação: vaga (sala_i, slot) vai para (sala_i+1, slot)
+            Map<Integer, Map<String, String>> rotacionado = inicializarSlots(ciclo);
+            for (int i = 0; i < ciclo.size(); i++) {
+                int origem = ciclo.get(i);
+                int destino = ciclo.get((i + 1) % ciclo.size());
+                rotacionado.get(destino).put("M", base.get(origem).get("M"));
+                rotacionado.get(destino).put("V", base.get(origem).get("V"));
+            }
+            base = rotacionado;
         }
 
-        // 3. Carregar histórico agregado em memória: Map<operadorId, Map<salaId, count>>
-        Map<String, Map<Integer, Integer>> historico = new HashMap<>();
-        for (Object[] row : escalaOpRepo.countAparicoesPorOperadorSala()) {
-            String opId = (String) row[0];
-            int salaId = ((Number) row[1]).intValue();
-            int count = ((Number) row[2]).intValue();
-            historico.computeIfAbsent(opId, k -> new HashMap<>()).put(salaId, count);
+        // 4. Converter para o formato Map<salaId, List<operadorId>> esperado por salvarEscala
+        // (turno é gravado pelo salvarEscala consultando o operador)
+        Map<Integer, List<String>> salasOperadores = new LinkedHashMap<>();
+        for (var entry : base.entrySet()) {
+            List<String> ops = new ArrayList<>();
+            String m = entry.getValue().get("M");
+            String v = entry.getValue().get("V");
+            if (m != null) ops.add(m);
+            if (v != null) ops.add(v);
+            salasOperadores.put(entry.getKey(), ops);
         }
 
-        // 4. Para cada plenário, escolher 2 operadores com menor count (empate → random)
-        Random random = new Random();
-        Map<Integer, List<String>> alocacao = new LinkedHashMap<>();
-
-        for (int salaId : plenariosIds) {
-            final int sId = salaId;
-            // Ordena operadores disponíveis por (count ASC, random tiebreak)
-            List<String> ordenados = new ArrayList<>(operadoresDisponiveis);
-            Collections.shuffle(ordenados, random);
-            ordenados.sort(Comparator.comparingInt(opId ->
-                    historico.getOrDefault(opId, Collections.emptyMap()).getOrDefault(sId, 0)));
-
-            List<String> escolhidos = new ArrayList<>(ordenados.subList(0, 2));
-            alocacao.put(salaId, escolhidos);
-            operadoresDisponiveis.removeAll(escolhidos);
-        }
-
-        // 5. Persistir a escala via o método existente (reaproveita validações + timestamps)
-        return salvarEscala(null, dataInicio, dataFim, alocacao, criadoPor);
+        return salasOperadores;
     }
 
-    private int extrairNumero(String nomeSala) {
-        try {
-            return Integer.parseInt(nomeSala.replaceAll("\\D+", ""));
-        } catch (NumberFormatException e) {
-            return Integer.MAX_VALUE;
+    private Map<Integer, Map<String, String>> inicializarSlots(List<Integer> ciclo) {
+        Map<Integer, Map<String, String>> r = new LinkedHashMap<>();
+        for (int sId : ciclo) {
+            Map<String, String> slots = new LinkedHashMap<>();
+            slots.put("M", null);
+            slots.put("V", null);
+            r.put(sId, slots);
         }
+        return r;
     }
 
     // ══ Operadores escalados hoje (por sala) ══════════════════
