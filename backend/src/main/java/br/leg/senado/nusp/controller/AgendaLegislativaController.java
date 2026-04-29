@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -21,19 +22,21 @@ public class AgendaLegislativaController {
 
     private final AgendaLegislativaService agendaService;
 
-    /** Reuniões de comissões de hoje filtradas por sala */
+    /** Reuniões (comissões + cessões) filtradas por sala. Data opcional (default: hoje). */
     @GetMapping("/hoje")
-    public ResponseEntity<?> agendaHoje(@RequestParam(required = false) Integer sala_id) {
-        var data = sala_id != null
-                ? agendaService.getAgendaPorSala(sala_id)
-                : agendaService.getAgendaComissoes();
-        return ResponseEntity.ok(Map.of("ok", true, "data", data));
+    public ResponseEntity<?> agendaHoje(
+            @RequestParam(required = false) Integer sala_id,
+            @RequestParam(required = false) String data) {
+        LocalDate dataAlvo = data != null && !data.isBlank() ? LocalDate.parse(data) : LocalDate.now();
+        var resultado = agendaService.getAgendaParaData(dataAlvo, sala_id);
+        return ResponseEntity.ok(Map.of("ok", true, "data", resultado));
     }
 
-    /** Sessões plenárias de hoje (Plenário Principal) */
+    /** Sessões plenárias (Plenário Principal). Data opcional (default: hoje). */
     @GetMapping("/plenario")
-    public ResponseEntity<?> agendaPlenario() {
-        return ResponseEntity.ok(Map.of("ok", true, "data", agendaService.getAgendaPlenario()));
+    public ResponseEntity<?> agendaPlenario(@RequestParam(required = false) String data) {
+        LocalDate dataAlvo = data != null && !data.isBlank() ? LocalDate.parse(data) : LocalDate.now();
+        return ResponseEntity.ok(Map.of("ok", true, "data", agendaService.getAgendaPlenarioParaData(dataAlvo)));
     }
 
     /** SSE stream — recebe atualizações em tempo real */

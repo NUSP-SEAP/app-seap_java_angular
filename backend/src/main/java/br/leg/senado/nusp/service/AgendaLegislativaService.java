@@ -57,7 +57,7 @@ public class AgendaLegislativaService {
             .build();
 
     private static final String COMISSAO_API = "https://legis.senado.leg.br/dadosabertos/comissao/agenda/";
-    private static final String ATIVIDADE_URL = "https://www25.senado.leg.br/web/atividade";
+    private static final String PLENARIO_API = "https://legis.senado.leg.br/dadosabertos/plenario/agenda/dia/";
     private static final Pattern PLENARIO_NUM_PATTERN = Pattern.compile("Plen[aá]rio\\s+n[ºo°]\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -82,8 +82,8 @@ public class AgendaLegislativaService {
                 log.info("Agenda comissões atualizada: {} reuniões", novasComissoes.size());
             }
 
-            // 2. Plenário Principal (scraping)
-            List<Map<String, Object>> novasPlenario = fetchPlenario();
+            // 2. Plenário Principal (API XML)
+            List<Map<String, Object>> novasPlenario = fetchPlenario(hoje);
             String hashPlenario = String.valueOf(novasPlenario.hashCode());
             boolean plenarioChanged = !hashPlenario.equals(lastHashPlenario);
             if (plenarioChanged) {
@@ -121,6 +121,38 @@ public class AgendaLegislativaService {
     /** Sessões plenárias de hoje (Plenário Principal) */
     public List<Map<String, Object>> getAgendaPlenario() {
         return cachePlenario;
+    }
+
+    /**
+     * Busca agenda (comissões + cessões) para uma data arbitrária.
+     * Se a data for hoje, retorna do cache; caso contrário, faz fetch sob demanda.
+     */
+    public List<Map<String, Object>> getAgendaParaData(LocalDate data, Integer salaId) {
+        carregarMapeamentoSeNecessario();
+        boolean ehHoje = data.equals(LocalDate.now());
+
+        List<Map<String, Object>> comissoes = ehHoje
+                ? cacheComissoes
+                : fetchComissoes(data.format(DATE_FMT));
+        List<Map<String, Object>> cessoes = ehHoje
+                ? cessaoSheetService.getCessoes()
+                : cessaoSheetService.fetchCessoesParaData(data);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (salaId != null) {
+            comissoes.stream().filter(r -> salaId == toInt(r.get("sala_id"))).forEach(result::add);
+            cessoes.stream().filter(r -> salaId == toInt(r.get("sala_id"))).forEach(result::add);
+        } else {
+            result.addAll(comissoes);
+            result.addAll(cessoes);
+        }
+        return result;
+    }
+
+    /** Plenário Principal para uma data arbitrária. */
+    public List<Map<String, Object>> getAgendaPlenarioParaData(LocalDate data) {
+        if (data.equals(LocalDate.now())) return cachePlenario;
+        return fetchPlenario(data.format(DATE_FMT));
     }
 
     /** Subscribir via SSE — retorna emitter que recebe atualizações */
@@ -220,81 +252,94 @@ public class AgendaLegislativaService {
         return result;
     }
 
-    // ══ Fetch — Plenário Principal (scraping) ═══════════════════
+    // ══ Fetch — Plenário Principal (API XML) ════════════════════
 
-    private List<Map<String, Object>> fetchPlenario() {
+    private List<Map<String, Object>> fetchPlenario(String dataFormatada) {
         try {
-            String html = httpGet(ATIVIDADE_URL);
-            if (html == null || html.isBlank()) return Collections.emptyList();
-            return parsePlenarioHtml(html);
+            String xml = httpGet(PLENARIO_API + dataFormatada);
+            if (xml == null || xml.isBlank()) return Collections.emptyList();
+            return parsePlenarioXml(xml);
         } catch (Exception e) {
             log.warn("Falha ao buscar agenda do plenário: {}", e.getMessage());
-            return cachePlenario;
+            return Collections.emptyList();
         }
     }
 
     /**
-     * Parse da página de atividade para extrair sessões plenárias.
-     *
-     * Estrutura HTML real (cada sessão é um bloco "painel painel-base"):
-     *   <strong>Senado Federal</strong>          ← identifica como plenário
-     *   <span class="painel-corpo-hora"> 10<small>h00</small> </span>
-     *   <span>Sessão Deliberativa Ordinária </span>
-     *   <span class="label label-warning">Em andamento</span>
-     *   <small class="descTruncadaDescricao">Descrição...</small>
+     * Parse do XML da API /plenario/agenda/dia/{YYYYMMDD}.
+     * Filtra somente sessões do Senado Federal (Casa=SF), descartando Congresso Nacional.
      */
-    private List<Map<String, Object>> parsePlenarioHtml(String html) {
+    private List<Map<String, Object>> parsePlenarioXml(String xml) throws Exception {
+        var factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        var builder = factory.newDocumentBuilder();
+        var doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+
+        NodeList sessoes = doc.getElementsByTagName("Sessao");
         List<Map<String, Object>> result = new ArrayList<>();
 
-        // Dividir em blocos de painel (cada sessão/comissão é um bloco)
-        String[] paineis = html.split("painel painel-base painel-base-azul");
+        for (int i = 0; i < sessoes.getLength(); i++) {
+            Element s = (Element) sessoes.item(i);
 
-        int idx = 0;
-        for (String painel : paineis) {
-            // Só processar painéis do Plenário (cabeçalho contém "Senado Federal" sem link de comissão)
-            if (!painel.contains("<strong>Senado Federal</strong>")) continue;
+            String casa = getTag(s, "Casa");
+            if (casa == null || !"SF".equalsIgnoreCase(casa)) continue;  // só Senado Federal
 
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("codigo", "PLEN-" + (++idx));
-            item.put("local", "Senado Federal");
-            item.put("tipo_descricao", "Sessão Plenária");
+            String codigo = getTag(s, "CodigoSessao");
+            item.put("codigo", codigo != null ? codigo : ("PLEN-" + (i + 1)));
 
-            // Horário: "10<small>h00</small>" ou "14<small>h00</small>"
-            Matcher horaMatcher = Pattern.compile("painel-corpo-hora[^>]*>\\s*(\\d{1,2})<small>h(\\d{2})</small>").matcher(painel);
-            if (horaMatcher.find()) {
-                String hora = horaMatcher.group(1).length() == 1 ? "0" + horaMatcher.group(1) : horaMatcher.group(1);
-                item.put("horario", hora + ":" + horaMatcher.group(2));
-            }
-
-            // Título da sessão: "<span>36ª</span> <span>Sessão Especial </span>" ou "<span>Sessão Deliberativa Ordinária </span>"
-            Matcher tituloMatcher = Pattern.compile("<span>([^<]*Sess[ãa]o[^<]*)</span>", Pattern.CASE_INSENSITIVE).matcher(painel);
+            // Título: "Nº Sessão Tipo" — ex: "6ª Sessão Solene"
+            // NumeroSessao vem como "6ª SESSÃO" — extraímos só o "6ª" para não duplicar com TipoSessao
+            String numero = getTag(s, "NumeroSessao");
+            String tipoSessao = getTag(s, "TipoSessao");
             StringBuilder titulo = new StringBuilder();
-            // Capturar também o número da sessão (ex: "36ª")
-            Matcher numMatcher = Pattern.compile("<span>(\\d+[ªº])</span>").matcher(painel);
-            if (numMatcher.find()) {
-                titulo.append(numMatcher.group(1)).append(" ");
+            if (numero != null) {
+                Matcher m = Pattern.compile("(\\d+[ªº])").matcher(numero);
+                if (m.find()) titulo.append(m.group(1)).append(" ");
             }
-            if (tituloMatcher.find()) {
-                titulo.append(tituloMatcher.group(1).trim());
-            }
+            if (tipoSessao != null) titulo.append(formatarMaiusculas(tipoSessao));
             item.put("titulo", titulo.toString().trim());
 
-            // Status: <span class="label label-xxx">Status</span>
-            Matcher statusMatcher = Pattern.compile("class=\"label label-[^\"]*\"[^>]*>([^<]+)<").matcher(painel);
-            if (statusMatcher.find()) {
-                item.put("situacao", statusMatcher.group(1).trim());
+            item.put("horario", getTag(s, "Hora"));
+            item.put("local", getTag(s, "LocalSessao"));
+            item.put("situacao", getTag(s, "SituacaoSessao"));
+            item.put("tipo_descricao", "Sessão Plenária");
+
+            String tipoPresenca = getTag(s, "DescricaoTipoPresenca");
+            if (tipoPresenca != null && !tipoPresenca.isBlank()) {
+                item.put("tipo_presenca", tipoPresenca);
             }
 
-            // Descrição
-            Matcher descMatcher = Pattern.compile("descTruncadaDescricao\">([^<]+)<").matcher(painel);
-            if (descMatcher.find()) {
-                item.put("descricao", descMatcher.group(1).trim());
+            // Descrição vem dentro de <Evento><DescricaoEvento>
+            Element evento = getFirstElement(s, "Evento");
+            if (evento != null) {
+                String desc = getTag(evento, "DescricaoEvento");
+                if (desc != null && !desc.isBlank()) item.put("descricao", desc);
             }
 
             result.add(item);
         }
 
         return result;
+    }
+
+    /** Capitaliza primeira letra de cada palavra (ex: "SESSÃO SOLENE" → "Sessão Solene"). */
+    private String formatarMaiusculas(String s) {
+        if (s == null || s.isBlank()) return s;
+        StringBuilder out = new StringBuilder(s.length());
+        boolean inicioPalavra = true;
+        for (char c : s.toLowerCase().toCharArray()) {
+            if (Character.isWhitespace(c)) {
+                inicioPalavra = true;
+                out.append(c);
+            } else if (inicioPalavra) {
+                out.append(Character.toUpperCase(c));
+                inicioPalavra = false;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 
     // ══ SSE — Broadcast ═════════════════════════════════════════

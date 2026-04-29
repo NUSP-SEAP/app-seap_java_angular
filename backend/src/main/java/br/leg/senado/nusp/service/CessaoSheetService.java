@@ -188,6 +188,21 @@ public class CessaoSheetService {
         return enabled;
     }
 
+    /**
+     * Busca cessões para uma data arbitrária (sob demanda, sem cache).
+     * Útil quando o usuário consulta um dia diferente de hoje.
+     */
+    public List<Map<String, Object>> fetchCessoesParaData(LocalDate data) {
+        if (!enabled) return Collections.emptyList();
+        try {
+            carregarMapeamentoSeNecessario();
+            return fetchCessoes(data);
+        } catch (Exception e) {
+            log.error("Erro ao buscar cessões para data {}", data, e);
+            return Collections.emptyList();
+        }
+    }
+
     // ══ Fetch — Sheets API ══════════════════════════════════════
 
     private List<Map<String, Object>> fetchCessoes(LocalDate hoje) throws Exception {
@@ -286,7 +301,8 @@ public class CessaoSheetService {
     }
 
     private static final Pattern DATA_PT = Pattern.compile(
-            "(\\d{1,2})\\s+de\\s+(\\w+)\\s+de\\s+(\\d{4})", Pattern.CASE_INSENSITIVE);
+            "(\\d{1,2})\\s+de\\s+(\\p{L}+)\\s+de\\s+(\\d{4})",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS);
 
     /** Tenta extrair uma data de uma célula da coluna A (pode vir como Date, "DD/MM/YYYY", "DD/MM" ou texto). */
     private LocalDate parseDataCelula(CellData cell) {

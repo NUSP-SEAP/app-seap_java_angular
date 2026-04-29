@@ -28,7 +28,7 @@ interface TableState extends ListParams {
       <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
       <a routerLink="/admin/operacoes" class="card-custom card-link">Operações de Áudio</a>
       <a routerLink="/admin/form-edit" class="card-custom card-link">Edição de Formulários</a>
-      <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa - {{ hojeDdMm }}</a>
+      <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa</a>
     </div>
 
     <!-- ═══ Operadores ═══ -->
