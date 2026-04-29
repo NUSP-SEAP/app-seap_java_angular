@@ -52,6 +52,11 @@ app:
     supervisor-username: ${ADMIN_SUPERVISOR_USERNAME}
     chefe-username: ${ADMIN_CHEFE_USERNAME}
     master-username: ${ADMIN_MASTER_USERNAME}
+  sheets:
+    credentials-path: ${GOOGLE_SHEETS_CREDENTIALS_PATH:/app/google-sheets-key.json}
+    spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+    refresh-interval-sec: ${GOOGLE_SHEETS_REFRESH_INTERVAL_SEC:60}
+    cessao-colors-hex: ${GOOGLE_SHEETS_CESSAO_COLORS:FFF2CC,FCE5CD}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}

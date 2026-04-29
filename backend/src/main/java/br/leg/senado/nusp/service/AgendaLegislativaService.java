@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 public class AgendaLegislativaService {
 
     private final SalaRepository salaRepository;
+    private final CessaoSheetService cessaoSheetService;
 
     // ── Cache em memória ────────────────────────────────────────
     private volatile List<Map<String, Object>> cacheComissoes = Collections.emptyList();
@@ -100,16 +101,21 @@ public class AgendaLegislativaService {
 
     // ══ API pública ═════════════════════════════════════════════
 
-    /** Reuniões de comissões de hoje filtradas por sala_id */
+    /** Reuniões (comissões + cessões) de hoje filtradas por sala_id */
     public List<Map<String, Object>> getAgendaPorSala(int salaId) {
-        return cacheComissoes.stream()
+        List<Map<String, Object>> result = new ArrayList<>();
+        cacheComissoes.stream()
                 .filter(r -> salaId == toInt(r.get("sala_id")))
-                .collect(Collectors.toList());
+                .forEach(result::add);
+        result.addAll(cessaoSheetService.getCessoesPorSala(salaId));
+        return result;
     }
 
-    /** Todas as reuniões de comissões de hoje */
+    /** Todas as reuniões (comissões + cessões) de hoje */
     public List<Map<String, Object>> getAgendaComissoes() {
-        return cacheComissoes;
+        List<Map<String, Object>> result = new ArrayList<>(cacheComissoes);
+        result.addAll(cessaoSheetService.getCessoes());
+        return result;
     }
 
     /** Sessões plenárias de hoje (Plenário Principal) */
@@ -164,6 +170,7 @@ public class AgendaLegislativaService {
             Element reuniao = (Element) reunioes.item(i);
             Map<String, Object> item = new LinkedHashMap<>();
 
+            item.put("tipo", "comissao");
             item.put("codigo", getTag(reuniao, "codigo"));
             item.put("titulo", getTag(reuniao, "titulo"));
             item.put("situacao", getTag(reuniao, "situacao"));
@@ -315,7 +322,7 @@ public class AgendaLegislativaService {
             data.put("tipo", "comissao");
             data.put("sala_id", entry.salaId);
         } else {
-            data.put("reunioes", cacheComissoes);
+            data.put("reunioes", getAgendaComissoes());
             data.put("tipo", "todas");
         }
         data.put("atualizado_em", java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Sao_Paulo")).toLocalDateTime().toString());

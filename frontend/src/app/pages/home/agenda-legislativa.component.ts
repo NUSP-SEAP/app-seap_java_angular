@@ -6,11 +6,12 @@ import { environment } from '../../../environments/environment';
 import { hojeAgendaLabel } from '../../core/helpers/date.helpers';
 
 interface Reuniao {
-  codigo: string;
+  tipo?: 'comissao' | 'cessao';
+  codigo?: string;
   titulo: string;
   horario: string;
   local: string;
-  situacao: string;
+  situacao?: string;
   comissao_sigla?: string;
   comissao_nome?: string;
   tipo_descricao?: string;
@@ -56,15 +57,20 @@ interface SalaAgenda {
             <p class="text-muted-sm">Nenhuma {{ sala.plenario ? 'sessão plenária agendada' : 'reunião agendada' }} para hoje.</p>
           </div>
         } @else {
-          @for (r of getReunioes(sala); track r.codigo) {
-            <div class="card-custom reuniao-card">
+          @for (r of getReunioes(sala); track $index) {
+            <div class="card-custom reuniao-card" [class.cessao]="r.tipo === 'cessao'">
               <div class="reuniao-header">
                 <span class="reuniao-horario">{{ r.horario }}</span>
-                <span class="reuniao-status" [class]="statusClass(r.situacao)">{{ r.situacao }}</span>
+                @if (r.situacao) {
+                  <span class="reuniao-status" [class]="statusClass(r.situacao)">{{ r.situacao }}</span>
+                }
               </div>
               <div class="reuniao-titulo">
                 @if (r.comissao_sigla) {
                   <span class="reuniao-sigla">{{ r.comissao_sigla }}</span>
+                }
+                @if (r.tipo === 'cessao') {
+                  <span class="reuniao-sigla cessao">Cessão</span>
                 }
                 {{ r.titulo }}
               </div>
@@ -122,6 +128,7 @@ interface SalaAgenda {
       margin-bottom:10px; padding:16px 20px;
       transition:border-color .15s;
       &:hover { border-color:var(--primary); }
+      &.cessao .reuniao-horario { color:#92400e; }
     }
     .reuniao-header {
       display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;
@@ -142,6 +149,7 @@ interface SalaAgenda {
     .reuniao-sigla {
       background:var(--primary); color:#fff; padding:2px 8px;
       border-radius:4px; font-size:.8rem; margin-right:6px;
+      &.cessao { background:#fef3c7; color:#92400e; }
     }
     .reuniao-comissao { font-size:.85rem; color:var(--muted); margin-bottom:4px; }
     .reuniao-descricao { font-size:.85rem; color:var(--muted); font-style:italic; margin-bottom:4px; }
