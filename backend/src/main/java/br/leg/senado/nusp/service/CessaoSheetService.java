@@ -230,18 +230,32 @@ public class CessaoSheetService {
 
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate dataAtual = null;
+        int linhasNoBlocoAtual = 0;
+        // Cada dia ocupa exatamente 3 linhas na planilha (3 horários por dia).
+        // Após esse limite, descartamos o forward-fill para não capturar
+        // dados de seções "template" da planilha (ex: semana modelo no rodapé).
+        final int MAX_LINHAS_POR_DIA = 3;
 
         for (RowData row : rows) {
-            if (row == null || row.getValues() == null) continue;
+            if (row == null || row.getValues() == null) {
+                if (dataAtual != null && ++linhasNoBlocoAtual >= MAX_LINHAS_POR_DIA) {
+                    dataAtual = null;
+                }
+                continue;
+            }
             List<CellData> cells = row.getValues();
 
-            // Coluna A → forward-fill da data
+            // Coluna A → forward-fill da data (limitado a 3 linhas)
             LocalDate dataDaLinha = parseDataCelula(cells.size() > 0 ? cells.get(0) : null);
             if (dataDaLinha != null) {
                 dataAtual = dataDaLinha;
+                linhasNoBlocoAtual = 0;
+            } else if (dataAtual != null && ++linhasNoBlocoAtual >= MAX_LINHAS_POR_DIA) {
+                dataAtual = null;
+                continue;
             }
             if (dataAtual == null) continue;
-            if (!dataAtual.equals(hoje)) continue;  // só nos importa o dia de hoje
+            if (!dataAtual.equals(hoje)) continue;  // só a data alvo
 
             // Para cada coluna mapeada (C, E, G, ...), checa cor + valor
             for (Map.Entry<String, String> entry : COL_TO_SALA.entrySet()) {
