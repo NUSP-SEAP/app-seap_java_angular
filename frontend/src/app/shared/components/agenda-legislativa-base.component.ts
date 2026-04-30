@@ -216,8 +216,8 @@ export class AgendaLegislativaBaseComponent implements OnInit, OnDestroy {
   sseConectado = signal(false);
   ultimaAtualizacao = signal('');
 
-  // Janela deslizante: hoje até 11 meses passados.
-  // Min = primeiro dia do mês há 11 meses; Max = último dia do mês atual.
+  // Janela de 3 meses: mês anterior, atual e próximo.
+  // Min = primeiro dia do mês anterior; Max = último dia do próximo mês.
   dataSelecionada = signal<Date>(new Date());
   minData = signal<Date>(this.calcularMin());
   maxData = signal<Date>(this.calcularMax());
@@ -331,12 +331,12 @@ export class AgendaLegislativaBaseComponent implements OnInit, OnDestroy {
 
   private calcularMin(): Date {
     const hoje = new Date();
-    return new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1);
+    return new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
   }
 
   private calcularMax(): Date {
     const hoje = new Date();
-    return new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);  // último dia do mês atual
+    return new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);  // último dia do próximo mês
   }
 
   private mesmoDia(a: Date, b: Date): boolean {
