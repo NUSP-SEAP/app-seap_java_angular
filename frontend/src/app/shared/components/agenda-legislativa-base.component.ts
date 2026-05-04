@@ -25,6 +25,8 @@ interface SalaAgenda {
   id: number | null;  // null = plenário principal
   nome: string;
   plenario: boolean;
+  /** Se true, só renderiza o card quando há ao menos uma reunião agendada. */
+  eventual?: boolean;
 }
 
 @Component({
@@ -63,7 +65,7 @@ interface SalaAgenda {
         (dataSelecionada)="onDataMudou($event)" />
     </div>
 
-    @for (sala of salas; track sala.nome) {
+    @for (sala of salasVisiveis(); track sala.nome) {
       <section class="agenda-section">
         <h2 class="section-title">
           <span class="section-icon">&#9679;</span>
@@ -197,7 +199,7 @@ export class AgendaLegislativaBaseComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private auth = inject(AuthService);
 
-  // Plenário Principal + 8 numerados em ordem
+  // Plenário Principal + 8 numerados + Auditório Petrônio Portella + Demais Salas
   salas: SalaAgenda[] = [
     { id: null, nome: 'Plenário Principal', plenario: true },
     { id: 3,  nome: 'Plenário 02', plenario: false },
@@ -208,6 +210,8 @@ export class AgendaLegislativaBaseComponent implements OnInit, OnDestroy {
     { id: 8,  nome: 'Plenário 13', plenario: false },
     { id: 9,  nome: 'Plenário 15', plenario: false },
     { id: 10, nome: 'Plenário 19', plenario: false },
+    { id: 1,  nome: 'Auditório Petrônio Portella', plenario: false, eventual: true },
+    { id: 11, nome: 'Demais Salas', plenario: false, eventual: true },
   ];
 
   reunioesComissoes = signal<Reuniao[]>([]);
@@ -277,6 +281,11 @@ export class AgendaLegislativaBaseComponent implements OnInit, OnDestroy {
   getReunioes(sala: SalaAgenda): Reuniao[] {
     if (sala.plenario) return this.reunioesPlenario();
     return this.reunioesComissoes().filter(r => r.sala_id === sala.id);
+  }
+
+  /** Salas eventuais (Auditório Petrônio Portella, Demais Salas) só aparecem quando têm reuniões. */
+  salasVisiveis(): SalaAgenda[] {
+    return this.salas.filter(s => !s.eventual || this.getReunioes(s).length > 0);
   }
 
   conectarSSE(_salaId: number | null, plenarioPrincipal: boolean): void {

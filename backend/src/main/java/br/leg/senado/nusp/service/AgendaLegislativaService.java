@@ -16,6 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -59,10 +60,14 @@ public class AgendaLegislativaService {
     private static final String COMISSAO_API = "https://legis.senado.leg.br/dadosabertos/comissao/agenda/";
     private static final String PLENARIO_API = "https://legis.senado.leg.br/dadosabertos/plenario/agenda/dia/";
     private static final Pattern PLENARIO_NUM_PATTERN = Pattern.compile("Plen[aá]rio\\s+n[ºo°]\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+    /** Casa qualquer "auditorio … petr.nio … portel(l)a" tolerando ausência de acentos e variações de grafia. */
+    private static final Pattern AUDITORIO_PETRONIO_PATTERN = Pattern.compile("auditorio.*petr.nio.*portell?a");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     // Mapeamento: número do plenário → sala_id (carregado na primeira execução)
     private volatile Map<Integer, Integer> plenarioToSalaId = null;
+    private volatile Integer salaDemaisSalasId = null;
+    private volatile Integer salaAuditorioPetronioId = null;
 
     // ══ Polling — a cada 30 segundos ════════════════════════════
 
@@ -382,20 +387,30 @@ public class AgendaLegislativaService {
         Map<Integer, Integer> mapa = new HashMap<>();
         List<Sala> salas = salaRepository.findAtivasOrdenadas();
         Pattern numPattern = Pattern.compile("Plen[aá]rio\\s+(\\d+)", Pattern.CASE_INSENSITIVE);
+        Integer demaisId = null;
+        Integer auditorioId = null;
 
         for (Sala sala : salas) {
-            Matcher m = numPattern.matcher(sala.getNome());
+            String nome = sala.getNome();
+            Matcher m = numPattern.matcher(nome);
             if (m.find()) {
                 int num = Integer.parseInt(m.group(1));
                 mapa.put(num, sala.getId());
+                continue;
             }
+            String norm = stripAccents(nome).toLowerCase();
+            if (norm.equals("demais salas")) demaisId = sala.getId();
+            else if (AUDITORIO_PETRONIO_PATTERN.matcher(norm).find()) auditorioId = sala.getId();
         }
 
         plenarioToSalaId = mapa;
-        log.info("Mapeamento plenário → sala carregado: {}", mapa);
+        salaDemaisSalasId = demaisId;
+        salaAuditorioPetronioId = auditorioId;
+        log.info("Mapeamento plenário → sala carregado: {}, demaisSalas={}, auditorio={}",
+                mapa, demaisId, auditorioId);
     }
 
-    /** Extrai nº do plenário do campo 'local' e mapeia para sala_id */
+    /** Mapeia o campo 'local' da API do Senado para uma sala interna. */
     private Integer mapearLocalParaSala(String local) {
         if (local == null || plenarioToSalaId == null) return null;
 
@@ -404,7 +419,27 @@ public class AgendaLegislativaService {
             int num = Integer.parseInt(m.group(1));
             return plenarioToSalaId.get(num);
         }
+
+        String norm = stripAccents(local).trim().toLowerCase();
+
+        // "Sala ..." (qualquer sala não catalogada) → Demais Salas
+        if (salaDemaisSalasId != null && norm.startsWith("sala ")) {
+            return salaDemaisSalasId;
+        }
+
+        // Variações de "Auditório Petrônio Portella" (acentos e grafia)
+        if (salaAuditorioPetronioId != null && AUDITORIO_PETRONIO_PATTERN.matcher(norm).find()) {
+            return salaAuditorioPetronioId;
+        }
+
         return null;
+    }
+
+    /** Remove diacríticos para comparação tolerante a acentos. */
+    private static String stripAccents(String s) {
+        if (s == null) return "";
+        return Normalizer.normalize(s, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
     }
 
     // ══ HTTP ════════════════════════════════════════════════════
