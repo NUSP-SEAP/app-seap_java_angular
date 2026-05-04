@@ -47,7 +47,7 @@ public class ReportPdfService {
                 COLS_ANORMALIDADES,
                 (tbl, r, nf) -> {
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
-                    tbl.addCell(cell(str(r, "sala_nome"), nf, false));
+                    tbl.addCell(cell(localDisplay(r, "sala_nome"), nf, false));
                     tbl.addCell(cell(str(r, "registrado_por"), nf, false));
                     tbl.addCell(cell(str(r, "descricao"), nf, false));
                     tbl.addCell(boolCell(bool(r, "solucionada"), nf, COLOR_GREEN, COLOR_RED));
@@ -61,7 +61,7 @@ public class ReportPdfService {
                 new String[]{"Local", "Data", "Operador", "Tipo", "Evento", "Pauta", "Início", "Fim", "Anormalidade?"},
                 COLS_OPERACOES_ENTRADAS,
                 (tbl, r, nf) -> {
-                    tbl.addCell(cell(str(r, "sala_nome"), nf, true));
+                    tbl.addCell(cell(localDisplay(r, "sala_nome"), nf, true));
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
                     tbl.addCell(cell(str(r, "operador"), nf, false));
                     tbl.addCell(cell(str(r, "tipo"), nf, false));
@@ -93,7 +93,7 @@ public class ReportPdfService {
                 new String[]{"Sala", "Data", "Início Operação", "Fim Operação", "Anormalidade?"},
                 COLS_MINHAS_OPERACOES,
                 (tbl, r, nf) -> {
-                    tbl.addCell(cell(str(r, "sala_nome"), nf, true));
+                    tbl.addCell(cell(localDisplay(r, "sala_nome"), nf, true));
                     tbl.addCell(cell(fmtDate(r.get("data")), nf, false));
                     tbl.addCell(centerCell(fmtTime(r.get("hora_entrada")), nf));
                     tbl.addCell(centerCell(fmtTime(r.get("hora_saida")), nf));
@@ -254,7 +254,7 @@ public class ReportPdfService {
             // Master
             PdfPTable master = new PdfPTable(mColW);
             master.setWidthPercentage(100);
-            master.addCell(dataCell(str(s, "sala"), nf, false));
+            master.addCell(dataCell(localDisplay(s, "sala"), nf, false));
             master.addCell(dataCell(fmtDate(s.get("data")), nf, false));
             master.addCell(dataCell(evtDisplay, nf, false));
             master.addCell(dataCell(fmtTime(s.get("ultimo_pauta")), nf, false));
@@ -568,6 +568,14 @@ public class ReportPdfService {
         if (v == null) return def;
         String s = v.toString().trim();
         return s.isEmpty() ? def : s;
+    }
+
+    /** Concatena "Demais Salas: <nome livre>" quando a row tem nome_demais_salas preenchido. */
+    private String localDisplay(Map<String, Object> r, String... salaKeys) {
+        Object ndsObj = r.get("nome_demais_salas");
+        String nomeDemais = ndsObj != null ? ndsObj.toString().trim() : "";
+        String salaNome = str(r, salaKeys);
+        return nomeDemais.isEmpty() ? salaNome : (salaNome + ": " + nomeDemais);
     }
 
     private boolean bool(Map<String, Object> m, String key) {

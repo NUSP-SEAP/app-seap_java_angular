@@ -47,6 +47,10 @@ public class RegistroOperacaoAudio {
     @Column(name = "DATA_EDITADO", nullable = false)
     private Boolean dataEditado = false;
 
+    /** Nome livre da sala digitado pelo operador quando SALA_ID = "Demais Salas". */
+    @Column(name = "NOME_DEMAIS_SALAS", length = 255)
+    private String nomeDemaisSalas;
+
     @PrePersist
     protected void onCreate() {
         this.criadoEm = Instant.now();

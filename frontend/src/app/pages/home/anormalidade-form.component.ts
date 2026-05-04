@@ -44,6 +44,13 @@ import { ToastService } from '../../shared/components/toast.component';
             </div>
           </div>
 
+          @if (isDemaisSalas()) {
+            <div class="form-row">
+              <label>Nome da Sala</label>
+              <input [(ngModel)]="nomeDemaisSalas" name="nome_demais_salas" readonly class="field-ro">
+            </div>
+          }
+
           <!-- 2) Responsáveis -->
           <h3 class="section-title">2) Responsáveis</h3>
           <div class="form-row">
@@ -180,6 +187,7 @@ export class AnormalidadeFormComponent implements OnInit {
   salaId = '';
   data = '';
   nomeEvento = '';
+  nomeDemaisSalas = '';
   responsavelEvento = '';
   horaInicio = '';
   descricao = '';
@@ -192,6 +200,10 @@ export class AnormalidadeFormComponent implements OnInit {
   resolvidaOperador = 'false';
   procedimentos = '';
   anomId = '';
+
+  isDemaisSalas(): boolean {
+    return Number(this.salaId) === 11;
+  }
 
   ngOnInit(): void {
     this.lookup.loadAll();
@@ -220,6 +232,7 @@ export class AnormalidadeFormComponent implements OnInit {
           this.data = d.data ? String(d.data).substring(0, 10) : '';
           this.salaId = d.sala_id ? String(d.sala_id) : '';
           this.nomeEvento = d.nome_evento || '';
+          this.nomeDemaisSalas = d.nome_demais_salas || '';
           this.responsavelEvento = d.responsavel_evento || '';
         }
 

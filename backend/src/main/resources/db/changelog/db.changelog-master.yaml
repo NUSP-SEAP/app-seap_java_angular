@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/005-escala-operador-turno.yaml
   - include:
       file: db/changelog/006-escala-funcao.yaml
+  - include:
+      file: db/changelog/007-demais-salas.yaml

@@ -29,6 +29,13 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
           <div class="field-value">{{ d()!['sala_nome'] }}</div>
         </div>
 
+        @if (d()!['nome_demais_salas']) {
+          <div class="field">
+            <label>Nome da Sala</label>
+            <div class="field-value">{{ d()!['nome_demais_salas'] }}</div>
+          </div>
+        }
+
         @if (d()!['multi_operador']) {
           <!-- ═══ PLENÁRIO PRINCIPAL ═══ -->
 

@@ -136,6 +136,7 @@ public class AdminDashboardService {
                                       Map<String, Object> periodo, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
                 "r.ID, r.DATA AS data, s.NOME AS sala_nome, " +
+                "r.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
                 "CASE WHEN r.CHECKLIST_DO_DIA_ID IS NOT NULL THEN 1 ELSE 0 END AS checklist_do_dia_ok, " +
                 "ult.NOME_EVENTO AS ultimo_evento, " +
                 "c.NOME AS comissao_nome, " +
@@ -162,7 +163,9 @@ public class AdminDashboardService {
     public PagedResult listOperacoesEntradas(int page, int limit, String search, String sort, String dir,
                                               Map<String, Object> periodo, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
-                "e.ID, r.DATA AS data, s.NOME AS sala_nome, o.NOME_COMPLETO AS operador_nome, " +
+                "e.ID, r.DATA AS data, s.NOME AS sala_nome, " +
+                "r.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
+                "o.NOME_COMPLETO AS operador_nome, " +
                 "e.TIPO_EVENTO, e.NOME_EVENTO, e.HORARIO_PAUTA, e.HORARIO_INICIO, e.HORARIO_TERMINO, " +
                 "e.HOUVE_ANORMALIDADE, e.EDITADO",
                 "FROM OPR_REGISTRO_ENTRADA e " +
@@ -182,7 +185,8 @@ public class AdminDashboardService {
                        e.ORDEM, e.SEQ, e.NOME_EVENTO, e.HORARIO_PAUTA, e.HORARIO_INICIO,
                        e.HORARIO_TERMINO, e.TIPO_EVENTO, e.USB_01, e.USB_02, e.OBSERVACOES,
                        e.COMISSAO_ID, e.RESPONSAVEL_EVENTO, e.HORA_ENTRADA, e.HORA_SAIDA,
-                       e.HOUVE_ANORMALIDADE, e.EDITADO, r.SALA_ID, c.NOME AS COMISSAO_NOME
+                       e.HOUVE_ANORMALIDADE, e.EDITADO, r.SALA_ID, c.NOME AS COMISSAO_NOME,
+                       r.NOME_DEMAIS_SALAS
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
                 JOIN CAD_SALA s ON s.ID = r.SALA_ID
@@ -206,6 +210,7 @@ public class AdminDashboardService {
         result.put("hora_saida", str(r[18])); result.put("houve_anormalidade", boolVal(r[19]));
         result.put("editado", boolVal(r[20])); result.put("sala_id", num(r[21]));
         result.put("comissao_nome", str(r[22]));
+        result.put("nome_demais_salas", str(r[23]));
 
         // Detectar multi_operador (Plenário Principal)
         List<?> salaFlag = em.createNativeQuery("SELECT MULTI_OPERADOR FROM CAD_SALA WHERE ID = ?1")
@@ -341,13 +346,16 @@ public class AdminDashboardService {
                                           Map<String, Object> periodo, Map<String, Object> filters, Integer salaId) {
         String fromJoins = "FROM OPR_ANORMALIDADE a " +
                 "JOIN CAD_SALA s ON s.ID = a.SALA_ID " +
+                "LEFT JOIN OPR_REGISTRO_AUDIO ra ON ra.ID = a.REGISTRO_ID " +
                 "LEFT JOIN PES_OPERADOR o ON o.ID = a.CRIADO_POR";
         if (salaId != null) {
             fromJoins += " AND a.SALA_ID = " + salaId;  // safe: int value
         }
 
         return DashboardQueryHelper.executePagedQuery(em,
-                "a.ID, a.DATA AS data, s.NOME AS sala_nome, a.NOME_EVENTO, " +
+                "a.ID, a.DATA AS data, s.NOME AS sala_nome, " +
+                "ra.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
+                "a.NOME_EVENTO, " +
                 "o.NOME_COMPLETO AS registrado_por, a.DESCRICAO_ANORMALIDADE, " +
                 "a.DATA_SOLUCAO, a.HOUVE_PREJUIZO, a.HOUVE_RECLAMACAO, a.RESOLVIDA_PELO_OPERADOR",
                 fromJoins, "a.DATA", ANOM_SORT, List.of("s.NOME", "a.NOME_EVENTO", "o.NOME_COMPLETO"),
@@ -453,19 +461,20 @@ public class AdminDashboardService {
 
         String sql = """
                 SELECT
-                    ra.ID               AS REGISTRO_ID,
-                    ra.DATA             AS DATA,
-                    ra.EM_ABERTO        AS EM_ABERTO,
-                    s.NOME              AS SALA_NOME,
-                    rop.ID              AS ENTRADA_ID,
-                    rop.ORDEM           AS ORDEM,
-                    rop.SEQ             AS SEQ,
-                    rop.NOME_EVENTO     AS NOME_EVENTO,
-                    rop.HORARIO_PAUTA   AS HORARIO_PAUTA,
-                    rop.HORARIO_INICIO  AS HORARIO_INICIO,
-                    rop.HORARIO_TERMINO AS HORARIO_TERMINO,
-                    op.NOME_EXIBICAO    AS OPERADOR_NOME_EXIBICAO,
-                    c.NOME              AS COMISSAO_NOME
+                    ra.ID                    AS REGISTRO_ID,
+                    ra.DATA                  AS DATA,
+                    ra.EM_ABERTO             AS EM_ABERTO,
+                    s.NOME                   AS SALA_NOME,
+                    ra.NOME_DEMAIS_SALAS     AS NOME_DEMAIS_SALAS,
+                    rop.ID                   AS ENTRADA_ID,
+                    rop.ORDEM                AS ORDEM,
+                    rop.SEQ                  AS SEQ,
+                    rop.NOME_EVENTO          AS NOME_EVENTO,
+                    rop.HORARIO_PAUTA        AS HORARIO_PAUTA,
+                    rop.HORARIO_INICIO       AS HORARIO_INICIO,
+                    rop.HORARIO_TERMINO      AS HORARIO_TERMINO,
+                    op.NOME_EXIBICAO         AS OPERADOR_NOME_EXIBICAO,
+                    c.NOME                   AS COMISSAO_NOME
                 FROM OPR_REGISTRO_AUDIO ra
                 JOIN CAD_SALA s ON s.ID = ra.SALA_ID
                 JOIN OPR_REGISTRO_ENTRADA rop ON rop.REGISTRO_ID = ra.ID
@@ -491,19 +500,20 @@ public class AdminDashboardService {
                            r[1] instanceof java.sql.Date sd ? sd.toLocalDate() : r[1]);
             m.put("em_aberto", r[2] != null && ((Number) r[2]).intValue() == 1);
             m.put("sala_nome", str(r[3]));
-            m.put("entrada_id", r[4]);
-            m.put("ordem", r[5]);
-            m.put("seq", r[6]);
-            m.put("nome_evento", str(r[7]));
-            m.put("horario_pauta", str(r[8]));
-            m.put("horario_inicio", str(r[9]));
-            m.put("horario_termino", str(r[10]));
-            m.put("operador_nome_exibicao", str(r[11]));
-            m.put("comissao_nome", str(r[12]));
+            m.put("nome_demais_salas", str(r[4]));
+            m.put("entrada_id", r[5]);
+            m.put("ordem", r[6]);
+            m.put("seq", r[7]);
+            m.put("nome_evento", str(r[8]));
+            m.put("horario_pauta", str(r[9]));
+            m.put("horario_inicio", str(r[10]));
+            m.put("horario_termino", str(r[11]));
+            m.put("operador_nome_exibicao", str(r[12]));
+            m.put("comissao_nome", str(r[13]));
             result.add(m);
 
-            if ("Plenário Principal".equals(str(r[3])) && r[4] != null) {
-                multiOpEntradaIds.add(((Number) r[4]).longValue());
+            if ("Plenário Principal".equals(str(r[3])) && r[5] != null) {
+                multiOpEntradaIds.add(((Number) r[5]).longValue());
             }
         }
 

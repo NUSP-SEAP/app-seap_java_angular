@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OperacaoService {
 
+    /** ID da sala "Demais Salas" — quando selecionada, exige nome livre da sala. */
+    public static final int SALA_DEMAIS_SALAS_ID = 11;
+
     private final RegistroOperacaoAudioRepository audioRepo;
     private final RegistroOperacaoOperadorRepository entradaRepo;
     private final EntradaOperadorRepository entradaOperadorRepo;
@@ -84,6 +87,7 @@ public class OperacaoService {
         m.put("sala_nome", row[3] != null ? row[3].toString() : null);
         m.put("checklist_do_dia_id", row[4] != null ? ((Number) row[4]).longValue() : null);
         m.put("checklist_do_dia_ok", row[5] != null && ((Number) row[5]).intValue() == 1);
+        m.put("nome_demais_salas", row.length > 6 && row[6] != null ? row[6].toString() : null);
         return m;
     }
 
@@ -124,18 +128,19 @@ public class OperacaoService {
         List<Object[]> sessaoRows = audioRepo.findSessaoAbertaPorSala(salaId);
 
         if (sessaoRows.isEmpty()) {
-            return Map.ofEntries(
-                    Map.entry("sala_id", salaId),
-                    Map.entry("existe_sessao_aberta", false),
-                    Map.entry("registro_id", 0),
-                    Map.entry("tipo_evento", "operacao"),
-                    Map.entry("permite_anormalidade", true),
-                    Map.entry("nomes_operadores_sessao", List.of()),
-                    Map.entry("situacao_operador", "sem_sessao"),
-                    Map.entry("entradas_operador", List.of()),
-                    Map.entry("entradas_sessao", List.of()),
-                    Map.entry("max_entradas_por_operador", 2)
-            );
+            Map<String, Object> sem = new LinkedHashMap<>();
+            sem.put("sala_id", salaId);
+            sem.put("nome_demais_salas", null);
+            sem.put("existe_sessao_aberta", false);
+            sem.put("registro_id", 0);
+            sem.put("tipo_evento", "operacao");
+            sem.put("permite_anormalidade", true);
+            sem.put("nomes_operadores_sessao", List.of());
+            sem.put("situacao_operador", "sem_sessao");
+            sem.put("entradas_operador", List.of());
+            sem.put("entradas_sessao", List.of());
+            sem.put("max_entradas_por_operador", 2);
+            return sem;
         }
 
         Map<String, Object> sessao = sessaoRowToMap(sessaoRows.get(0));
@@ -167,6 +172,7 @@ public class OperacaoService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sala_id", salaId);
         result.put("sala_nome", sessao.get("sala_nome"));
+        result.put("nome_demais_salas", sessao.get("nome_demais_salas"));
         result.put("existe_sessao_aberta", true);
         result.put("registro_id", registroId);
         result.put("tipo_evento", tipoHeader);
@@ -320,6 +326,7 @@ public class OperacaoService {
         String responsavelEvento = blankToNull(clean(body, "responsavel_evento"));
         String horaEntrada = normalizeTime(clean(body, "hora_entrada"));
         String horaSaida = normalizeTime(clean(body, "hora_saida"));
+        String nomeDemaisSalas = blankToNull(clean(body, "nome_demais_salas"));
         String tipoEventoRaw = clean(body, "tipo_evento");
         String tipoEvento = normalizarTipoEvento(tipoEventoRaw.isEmpty() ? "operacao" : tipoEventoRaw);
         if (tipoEvento.isEmpty()) tipoEvento = "operacao";
@@ -335,6 +342,7 @@ public class OperacaoService {
         if (!errors.isEmpty()) throw new ServiceValidationException("Erro de validação.");
 
         int salaId = parseSalaId(salaIdRaw);
+        boolean isDemaisSalas = (salaId == SALA_DEMAIS_SALAS_ID);
         Map<String, Object> estado = obterEstadoSessao(salaId, userId);
 
         // ── EDIÇÃO ──
@@ -412,12 +420,18 @@ public class OperacaoService {
         long registroId;
 
         if (!existeSessao) {
+            // "Demais Salas" exige o nome livre da sala apenas na criação da sessão
+            if (isDemaisSalas && nomeDemaisSalas == null) {
+                throw new ServiceValidationException("Informe o nome da sala.");
+            }
+
             // Cria nova sessão
             RegistroOperacaoAudio audio = new RegistroOperacaoAudio();
             audio.setData(LocalDate.parse(dataOperacao));
             audio.setSalaId(salaId);
             audio.setEmAberto(true);
             audio.setCriadoPor(userId);
+            if (isDemaisSalas) audio.setNomeDemaisSalas(nomeDemaisSalas);
 
             // Busca checklist do dia
             List<Object[]> checkRows = audioRepo.findChecklistDoDia(dataOperacao, salaId);
@@ -709,6 +723,32 @@ public class OperacaoService {
             audioRepo.updateSalaByEntrada(entradaId, novoSalaId);
         }
 
+        // Atualizar/limpar NOME_DEMAIS_SALAS conforme a sala atual da sessão
+        if (registroId > 0) {
+            Integer salaIdAtual = novoSalaId;
+            if (salaIdAtual == null) {
+                salaIdAtual = (Integer) snapshot.get("sala_id");
+            }
+            if (salaIdAtual != null) {
+                if (salaIdAtual == SALA_DEMAIS_SALAS_ID) {
+                    String nomeRecebido = blankToNull(clean(body, "nome_demais_salas"));
+                    if (nomeRecebido == null) {
+                        throw new ServiceValidationException("Informe o nome da sala.");
+                    }
+                    entityManager.createNativeQuery(
+                        "UPDATE OPR_REGISTRO_AUDIO SET NOME_DEMAIS_SALAS = :n WHERE ID = :rid")
+                        .setParameter("n", nomeRecebido)
+                        .setParameter("rid", registroId)
+                        .executeUpdate();
+                } else {
+                    entityManager.createNativeQuery(
+                        "UPDATE OPR_REGISTRO_AUDIO SET NOME_DEMAIS_SALAS = NULL WHERE ID = :rid AND NOME_DEMAIS_SALAS IS NOT NULL")
+                        .setParameter("rid", registroId)
+                        .executeUpdate();
+                }
+            }
+        }
+
         // Atualizar suspensões se multi-operador
         if (isMultiOp && body.containsKey("suspensoes")) {
             // Capturar suspensões anteriores para comparar
@@ -862,6 +902,7 @@ public class OperacaoService {
         result.put("sala_id", r[2] != null ? ((Number) r[2]).intValue() : null);
         result.put("nome_evento", str(r[3]));
         result.put("responsavel_evento", str(r[4]));
+        result.put("nome_demais_salas", r.length > 5 ? str(r[5]) : null);
         return result;
     }
 }

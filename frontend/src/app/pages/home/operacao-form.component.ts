@@ -9,6 +9,9 @@ import { MultiSelectDropdownComponent, MultiSelectOption } from '../../shared/co
 
 type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas_entradas';
 
+/** ID da sala "Demais Salas" — quando selecionada, exige o nome livre da sala. */
+const SALA_DEMAIS_SALAS_ID = 11;
+
 @Component({
   selector: 'app-operacao-form',
   standalone: true,
@@ -60,6 +63,17 @@ type Situacao = 'inicial' | 'sem_sessao' | 'sem_entrada' | 'uma_entrada' | 'duas
               </select>
             }
           </div>
+
+          <!-- Nome da Sala (somente para "Demais Salas") -->
+          @if (isDemaisSalas()) {
+            <div class="form-row">
+              <label>Nome da Sala <span class="req">*</span></label>
+              <input [(ngModel)]="nomeDemaisSalas" name="nome_demais_salas"
+                     [disabled]="formDisabled()"
+                     [readonly]="isRO() || nomeDemaisSalasReadonly()"
+                     [class.field-ro]="isRO() || nomeDemaisSalasReadonly()">
+            </div>
+          }
 
           <!-- Operadores (Plenário Principal) -->
           @if (isMultiOperador && !editMode()) {
@@ -382,6 +396,7 @@ export class OperacaoFormComponent implements OnInit {
   // ── Campos do formulário ──
   salaId = '';
   comissaoId = '';
+  nomeDemaisSalas = '';
   nomeEvento = '';
   responsavelEvento = '';
   dataOperacao = new Date().toISOString().split('T')[0];
@@ -523,6 +538,16 @@ export class OperacaoFormComponent implements OnInit {
     return true;
   }
 
+  isDemaisSalas(): boolean {
+    return Number(this.salaId) === SALA_DEMAIS_SALAS_ID;
+  }
+
+  /** O nome da sala é por sessão; só pode ser editado pelo 1º operador (criador) ou em sessão sem entradas. */
+  nomeDemaisSalasReadonly(): boolean {
+    if (this.editMode()) return this.editData()?.['ordem'] !== 1;
+    return this.sessaoAberta();
+  }
+
   btnSalvarLabel(): string {
     if (this.situacao() === 'uma_entrada') return 'Novo registro (2ª entrada)';
     return 'Salvar registro';
@@ -540,6 +565,7 @@ export class OperacaoFormComponent implements OnInit {
         this.salaId = String(d['sala_id'] || '');
         this.comissaoId = d['comissao_id'] ? String(d['comissao_id']) : '';
         this.comissaoNome = d['comissao_nome'] || '';
+        this.nomeDemaisSalas = d['nome_demais_salas'] || '';
         this.nomeEvento = d['nome_evento'] || '';
         this.responsavelEvento = d['responsavel_evento'] || '';
         this.dataOperacao = this.extractDate(d['data']);
@@ -589,6 +615,7 @@ export class OperacaoFormComponent implements OnInit {
       this.situacao.set('inicial');
       this.estadoSessao = null;
       this.isMultiOperador = false;
+      this.nomeDemaisSalas = '';
       this.limparFormulario();
       return;
     }
@@ -612,6 +639,13 @@ export class OperacaoFormComponent implements OnInit {
         const data = res.data || {};
         this.estadoSessao = data;
         this.comissaoTravada = false;
+
+        // Demais Salas: se há sessão aberta, herda o nome livre dela; senão, limpa
+        if (this.isDemaisSalas()) {
+          this.nomeDemaisSalas = data.nome_demais_salas || '';
+        } else {
+          this.nomeDemaisSalas = '';
+        }
 
         const entradasOp: any[] = data.entradas_operador || [];
         const sessaoAberta = data.existe_sessao_aberta === true;
@@ -853,6 +887,11 @@ export class OperacaoFormComponent implements OnInit {
 
   onSubmit(): void {
     if (!this.salaId && !this.editMode()) { this.focusFirst('sala_id'); return; }
+    if (this.isDemaisSalas() && !this.nomeDemaisSalasReadonly() && !this.nomeDemaisSalas.trim()) {
+      this.toast.warning('Informe o nome da sala.');
+      this.focusFirst('nome_demais_salas');
+      return;
+    }
     if (!this.nomeEvento) { this.focusFirst('nome_evento'); return; }
     if (!this.horaInicio) { this.focusFirst('hora_inicio'); return; }
 
@@ -951,6 +990,7 @@ export class OperacaoFormComponent implements OnInit {
     const payload: Record<string, any> = {
       comissao_id: this.isMultiOperador ? null : (this.comissaoId ? parseInt(this.comissaoId, 10) : null),
       data_operacao: this.dataOperacao,
+      nome_demais_salas: this.isDemaisSalas() ? (this.nomeDemaisSalas?.trim() || null) : null,
       nome_evento: this.nomeEvento,
       responsavel_evento: this.isMultiOperador ? null : this.responsavelEvento,
       horario_pauta: this.isMultiOperador ? null : (this.horarioPauta || null),

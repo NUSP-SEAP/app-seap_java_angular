@@ -118,7 +118,8 @@ public interface RegistroOperacaoOperadorRepository extends JpaRepository<Regist
     /** Busca dados para pré-preenchimento de anormalidade. */
     @Query(value = """
             SELECT r.ID, r.DATA, r.SALA_ID,
-                   e.NOME_EVENTO, e.RESPONSAVEL_EVENTO
+                   e.NOME_EVENTO, e.RESPONSAVEL_EVENTO,
+                   r.NOME_DEMAIS_SALAS
             FROM OPR_REGISTRO_AUDIO r
             LEFT JOIN OPR_REGISTRO_ENTRADA e ON e.ID = :entradaId
             WHERE r.ID = :registroId

@@ -96,7 +96,7 @@ public class RdsXlsxService {
                     int row = START_ROW + idx;
                     Map<String, Object> line = lines.get(idx);
 
-                    setCellValue(ws, row, 0, objStr(line, "sala_nome"));            // A
+                    setCellValue(ws, row, 0, localDisplay(line));                   // A
                     setCellValue(ws, row, 1, "SGM");                                // B
                     setCellValue(ws, row, 2, objStr(line, "atividade_legislativa")); // C
                     setCellValue(ws, row, 3, objStr(line, "nome_evento"));           // D
@@ -153,6 +153,7 @@ public class RdsXlsxService {
                 m.put("registro_id", rid);
                 m.put("data", r.get("data"));
                 m.put("sala_nome", r.get("sala_nome"));
+                m.put("nome_demais_salas", r.get("nome_demais_salas"));
                 m.put("em_aberto", boolVal(r, "em_aberto"));
                 m.put("rows", new ArrayList<Map<String, Object>>());
                 return m;
@@ -229,6 +230,7 @@ public class RdsXlsxService {
                 line.put("group_index", g);
                 line.put("data", sess.get("data"));
                 line.put("sala_nome", salaNome);
+                line.put("nome_demais_salas", sess.get("nome_demais_salas"));
                 line.put("atividade_legislativa", atividade);
                 line.put("nome_evento", chooseValue(groupEntries, "nome_evento"));
                 line.put("horario_pauta", chooseValue(groupEntries, "horario_pauta"));
@@ -427,6 +429,14 @@ public class RdsXlsxService {
         if (v == null) return null;
         String s = v.toString().trim();
         return s.isEmpty() ? null : s;
+    }
+
+    /** Retorna sala_nome ou "<sala_nome>: <nome livre>" quando há nome_demais_salas preenchido. */
+    private String localDisplay(Map<String, Object> m) {
+        String salaNome = objStr(m, "sala_nome");
+        String nomeDemais = objStr(m, "nome_demais_salas");
+        if (nomeDemais == null) return salaNome;
+        return salaNome == null ? nomeDemais : (salaNome + ": " + nomeDemais);
     }
 
     private int intVal(Map<String, Object> m, String key) {

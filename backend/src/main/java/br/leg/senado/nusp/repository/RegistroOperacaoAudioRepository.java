@@ -17,7 +17,8 @@ public interface RegistroOperacaoAudioRepository extends JpaRepository<RegistroO
             SELECT r.ID, r.DATA, r.SALA_ID,
                    s.NOME AS SALA_NOME,
                    r.CHECKLIST_DO_DIA_ID,
-                   r.CHECKLIST_DO_DIA_OK
+                   r.CHECKLIST_DO_DIA_OK,
+                   r.NOME_DEMAIS_SALAS
             FROM OPR_REGISTRO_AUDIO r
             JOIN CAD_SALA s ON s.ID = r.SALA_ID
             WHERE r.SALA_ID = :salaId AND r.EM_ABERTO = 1

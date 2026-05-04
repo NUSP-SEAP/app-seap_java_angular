@@ -42,7 +42,7 @@ public class ReportDocxService {
                 COLS_OPERACOES_ENTRADAS,
                 (tbl, i, r) -> {
                     boolean anom = bool(r, "anormalidade");
-                    setText(tbl, i, 0, str(r, "sala"), true, null, ParagraphAlignment.LEFT, 8);
+                    setText(tbl, i, 0, localDisplay(r, "sala"), true, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 1, fmtDate(r.get("data")), false, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 2, str(r, "operador"), false, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 3, str(r, "tipo"), false, null, ParagraphAlignment.LEFT, 8);
@@ -63,7 +63,7 @@ public class ReportDocxService {
                     boolean prej = bool(r, "houve_prejuizo");
                     boolean recl = bool(r, "houve_reclamacao");
                     setText(tbl, i, 0, fmtDate(r.get("data")), false, null, ParagraphAlignment.LEFT, 8);
-                    setText(tbl, i, 1, str(r, "sala"), false, null, ParagraphAlignment.LEFT, 8);
+                    setText(tbl, i, 1, localDisplay(r, "sala"), false, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 2, str(r, "registrado_por"), false, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 3, str(r, "descricao"), false, null, ParagraphAlignment.LEFT, 8);
                     setText(tbl, i, 4, sol ? "Sim" : "Não", true, sol ? COLOR_GREEN : COLOR_RED, ParagraphAlignment.CENTER, 8);
@@ -99,7 +99,7 @@ public class ReportDocxService {
             XWPFTable tm = addTable(doc, 2, 7, COLS_OPERACOES_SESSOES_MASTER);
             renderHeader(tm, new String[]{"Local", "Data", "Evento", "Pauta", "Início", "Fim", "Verificação"}, HEADER_FILL);
             setShading(tm.getRow(1), DATA_ROW_FILL);
-            setText(tm, 1, 0, str(s, "sala"), false, null, ParagraphAlignment.LEFT, 9);
+            setText(tm, 1, 0, localDisplay(s, "sala"), false, null, ParagraphAlignment.LEFT, 9);
             setText(tm, 1, 1, fmtDate(s.get("data")), false, null, ParagraphAlignment.LEFT, 9);
             setText(tm, 1, 2, evtDisplay, false, null, ParagraphAlignment.LEFT, 9);
             setText(tm, 1, 3, fmtTime(s.get("ultimo_pauta")), false, null, ParagraphAlignment.CENTER, 9);
@@ -481,6 +481,14 @@ public class ReportDocxService {
             if (v != null && !v.toString().isEmpty()) return v.toString();
         }
         return "--";
+    }
+
+    /** Concatena "Demais Salas: <nome livre>" quando a row tem nome_demais_salas preenchido. */
+    private String localDisplay(Map<String, Object> r, String... salaKeys) {
+        Object ndsObj = r.get("nome_demais_salas");
+        String nomeDemais = ndsObj != null ? ndsObj.toString().trim() : "";
+        String salaNome = str(r, salaKeys);
+        return nomeDemais.isEmpty() ? salaNome : (salaNome + ": " + nomeDemais);
     }
 
     private String strOrDefault(Map<String, Object> m, String key, String def) {

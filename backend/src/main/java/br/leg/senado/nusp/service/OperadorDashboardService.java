@@ -165,6 +165,7 @@ public class OperadorDashboardService {
                                             String sort, String dir, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
                 "e.ID AS entrada_id, r.DATA AS data, s.NOME AS sala_nome, " +
+                "r.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
                 "e.TIPO_EVENTO, e.NOME_EVENTO, e.HORA_ENTRADA, e.HORA_SAIDA, e.HOUVE_ANORMALIDADE, " +
                 "a.ID AS anormalidade_id",
                 "FROM OPR_REGISTRO_ENTRADA e " +
@@ -203,7 +204,8 @@ public class OperadorDashboardService {
                        e.OBSERVACOES_EDITADO, e.COMISSAO_EDITADO, e.SALA_EDITADO,
                        e.HORA_ENTRADA_EDITADO, e.HORA_SAIDA_EDITADO,
                        e.SUSPENSOES_EDITADO, e.OPERADOR_ID,
-                       r.DATA_EDITADO
+                       r.DATA_EDITADO,
+                       r.NOME_DEMAIS_SALAS
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
                 JOIN CAD_SALA s ON s.ID = r.SALA_ID
@@ -240,6 +242,7 @@ public class OperadorDashboardService {
         result.put("suspensoes_editado", boolVal(r[33]));
         result.put("operador_id", str(r[34]));
         result.put("data_editado", boolVal(r[35]));
+        result.put("nome_demais_salas", str(r[36]));
 
         // Nome do operador responsável (criador da entrada)
         String opId = str(r[34]);
