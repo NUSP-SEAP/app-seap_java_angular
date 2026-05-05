@@ -59,8 +59,8 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
               <th><app-column-filter [col]="sessCols[1]" [distinctValues]="gd(opMeta(),'data')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSortEvt($event)" (filterChange)="onOpFilterEvt($event)" /></th>
               <th>Evento</th>
               <th>Pauta</th>
-              <th>Início</th>
-              <th>Fim</th>
+              <th class="th-sort" (click)="toggleOpSort('inicio')">Início <span class="sort-arrow" [attr.data-state]="sortState('inicio')">{{ sortGlyph('inicio') }}</span></th>
+              <th class="th-sort" (click)="toggleOpSort('fim')">Fim <span class="sort-arrow" [attr.data-state]="sortState('fim')">{{ sortGlyph('fim') }}</span></th>
               <th>Verificação</th>
             </tr></thead>
             <tbody>
@@ -142,7 +142,10 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
             <thead><tr>
               <th><app-column-filter [col]="entCols[0]" [distinctValues]="gd(opMeta(),'sala')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSortEvt($event)" (filterChange)="onOpFilterEvt($event)" /></th>
               <th><app-column-filter [col]="entCols[1]" [distinctValues]="gd(opMeta(),'data')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSortEvt($event)" (filterChange)="onOpFilterEvt($event)" /></th>
-              <th>Operador</th><th>Tipo</th><th>Evento</th><th>Pauta</th><th>Início</th><th>Fim</th><th>Anom?</th>
+              <th>Operador</th><th>Tipo</th><th>Evento</th><th>Pauta</th>
+              <th class="th-sort" (click)="toggleOpSort('inicio')">Início <span class="sort-arrow" [attr.data-state]="sortState('inicio')">{{ sortGlyph('inicio') }}</span></th>
+              <th class="th-sort" (click)="toggleOpSort('fim')">Fim <span class="sort-arrow" [attr.data-state]="sortState('fim')">{{ sortGlyph('fim') }}</span></th>
+              <th>Anom?</th>
             </tr></thead>
             <tbody>
               @if (opRows().length === 0) {
@@ -241,6 +244,9 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
     .controls-right { display:flex; align-items:center; gap:6px; }
     .check-label { display:flex; align-items:center; gap:6px; font-size:.85rem; cursor:pointer; input{cursor:pointer;} }
     .btn-rds { background:#16a34a; color:#fff; border:none; border-radius:6px; padding:5px 14px; font-size:.8rem; font-weight:600; cursor:pointer; &:hover{background:#15803d;} &:disabled{opacity:.5;cursor:not-allowed;} }
+    .th-sort { cursor:pointer; user-select:none; white-space:nowrap; &:hover{background:var(--row-hover);} }
+    .sort-arrow { font-size:.7rem; margin-left:4px; color:var(--muted); }
+    .sort-arrow[data-state="asc"], .sort-arrow[data-state="desc"] { color:#000; }
   `],
 })
 export class AdminOperacoesComponent implements OnInit {
@@ -330,6 +336,22 @@ export class AdminOperacoesComponent implements OnInit {
   onOpSortEvt(e: { sort: string; direction: string }): void {
     this.opState.sort = e.sort; this.opState.direction = e.direction; this.opState.page = 1;
     this.loadOperacoes();
+  }
+  // Toggle asc → desc → off (off volta ao default: data desc)
+  toggleOpSort(key: string): void {
+    if (this.opState.sort !== key) { this.opState.sort = key; this.opState.direction = 'asc'; }
+    else if (this.opState.direction === 'asc') { this.opState.direction = 'desc'; }
+    else { this.opState.sort = 'data'; this.opState.direction = 'desc'; }
+    this.opState.page = 1;
+    this.loadOperacoes();
+  }
+  sortState(key: string): 'asc' | 'desc' | 'off' {
+    if (this.opState.sort !== key) return 'off';
+    return this.opState.direction === 'asc' ? 'asc' : 'desc';
+  }
+  sortGlyph(key: string): string {
+    const s = this.sortState(key);
+    return s === 'asc' ? '▲' : s === 'desc' ? '▼' : '▽';
   }
   onOpFilterEvt(e: { key: string; state: ColumnFilterState | null }): void {
     if (e.state) this.opFilters[e.key] = e.state;

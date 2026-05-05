@@ -130,6 +130,7 @@ public class AdminDashboardService {
 
     private static final Map<String, String> OP_SESS_SORT = new LinkedHashMap<>() {{
         put("data", "r.DATA"); put("sala", "s.NOME");
+        put("inicio", "ult.HORARIO_INICIO"); put("fim", "ult.HORARIO_TERMINO");
     }};
 
     public PagedResult listOperacoes(int page, int limit, String search, String sort, String dir,
@@ -158,6 +159,7 @@ public class AdminDashboardService {
 
     private static final Map<String, String> ENT_SORT = new LinkedHashMap<>() {{
         put("data", "r.DATA"); put("sala", "s.NOME"); put("operador", "o.NOME_COMPLETO");
+        put("inicio", "e.HORARIO_INICIO"); put("fim", "e.HORARIO_TERMINO");
     }};
 
     public PagedResult listOperacoesEntradas(int page, int limit, String search, String sort, String dir,
