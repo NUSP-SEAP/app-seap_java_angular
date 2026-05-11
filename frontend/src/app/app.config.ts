@@ -1,9 +1,10 @@
 import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter, withNavigationErrorHandler } from '@angular/router';
+import { provideRouter, withNavigationErrorHandler, TitleStrategy } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { PrefixedTitleStrategy } from './core/title-strategy';
 
 // Detecta falha de carregamento de chunk lazy (bundle antigo em cache após
 // um deploy tenta importar arquivo que não existe mais) e recarrega a página
@@ -43,5 +44,6 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withNavigationErrorHandler(reloadIfChunkError)),
     provideHttpClient(withInterceptors([authInterceptor])),
     { provide: ErrorHandler, useClass: AppErrorHandler },
+    { provide: TitleStrategy, useClass: PrefixedTitleStrategy },
   ],
 };
