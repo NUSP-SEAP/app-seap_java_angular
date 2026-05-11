@@ -1,6 +1,6 @@
 package br.leg.senado.nusp.service;
 
-import br.leg.senado.nusp.entity.*;;
+import br.leg.senado.nusp.entity.*;
 import br.leg.senado.nusp.enums.StatusResposta;
 import br.leg.senado.nusp.enums.Turno;
 import br.leg.senado.nusp.exception.ServiceValidationException;
@@ -44,11 +44,17 @@ public class ChecklistService {
 
         for (int idx = 0; idx < itens.size(); idx++) {
             Map<String, Object> it = itens.get(idx);
-            if (it == null) { invalid.add(idx); continue; }
+            if (it == null) {
+                invalid.add(idx);
+                continue;
+            }
 
             Object itemId = it.get("item_tipo_id");
             String nome = str(it.get("nome")).strip();
-            if (itemId == null && nome.isEmpty()) { invalid.add(idx); continue; }
+            if (itemId == null && nome.isEmpty()) {
+                invalid.add(idx);
+                continue;
+            }
 
             String status = str(it.get("status")).strip();
             String descFalha = str(it.get("descricao_falha")).strip();
@@ -67,20 +73,30 @@ public class ChecklistService {
         if (totalMarcados == 0)
             throw new ServiceValidationException("Pelo menos um item do checklist deve ser preenchido.");
         if (!falhaSemDesc.isEmpty())
-            throw new ServiceValidationException("Itens marcados como Falha precisam de descrição com no mínimo 10 caracteres.");
+            throw new ServiceValidationException(
+                    "Itens marcados como Falha precisam de descrição com no mínimo 10 caracteres.");
 
         return totalMarcados;
     }
 
-    private static String str(Object o) { String s = NativeQueryUtils.str(o); return s == null ? "" : s; }
-    private static String blankToNull(String s) { return (s == null || s.isBlank()) ? null : s.strip(); }
+    private static String str(Object o) {
+        String s = NativeQueryUtils.str(o);
+        return s == null ? "" : s;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.strip();
+    }
 
     /** Resolve item_tipo_id (pelo id direto ou pelo nome). */
     private Integer resolveItemTipoId(Map<String, Object> item, Map<String, Integer> nomeToId) {
         Object idRaw = item.get("item_tipo_id");
         if (idRaw != null) {
-            try { return Integer.parseInt(idRaw.toString()); }
-            catch (Exception e) { return null; }
+            try {
+                return Integer.parseInt(idRaw.toString());
+            } catch (Exception e) {
+                return null;
+            }
         }
         String nome = str(item.get("nome")).strip();
         return nomeToId.get(nome);
@@ -102,8 +118,11 @@ public class ChecklistService {
 
         String dataOperacao = str(body.get("data_operacao")).strip();
         int salaId;
-        try { salaId = Integer.parseInt(str(body.get("sala_id")).strip()); }
-        catch (Exception e) { throw new ServiceValidationException("Local inválido."); }
+        try {
+            salaId = Integer.parseInt(str(body.get("sala_id")).strip());
+        } catch (Exception e) {
+            throw new ServiceValidationException("Local inválido.");
+        }
 
         String horaInicio = str(body.get("hora_inicio_testes")).strip();
         String horaTermino = str(body.get("hora_termino_testes")).strip();
@@ -117,7 +136,9 @@ public class ChecklistService {
             try {
                 int hora = Integer.parseInt(horaInicio.split(":")[0]);
                 turnoRaw = hora < 13 ? "Matutino" : "Vespertino";
-            } catch (Exception e) { turnoRaw = "Matutino"; }
+            } catch (Exception e) {
+                turnoRaw = "Matutino";
+            }
         }
         Turno turno = Turno.fromValor(turnoRaw);
 
@@ -136,7 +157,7 @@ public class ChecklistService {
                 """).setParameter(1, salaId).setParameter(2, userId).getSingleResult();
         if (dupCheck.intValue() == 1) {
             throw new ServiceValidationException(
-                "Já existe uma verificação sua para este local enviada há menos de 5 minutos. Aguarde antes de enviar novamente.");
+                    "Já existe uma verificação sua para este local enviada há menos de 5 minutos. Aguarde antes de enviar novamente.");
         }
 
         // Mapa nome → id para resolução de itens legados
@@ -161,11 +182,14 @@ public class ChecklistService {
         int totalRespostas = 0;
         for (Map<String, Object> item : itens) {
             Integer tipoId = resolveItemTipoId(item, nomeToId);
-            if (tipoId == null) continue;
+            if (tipoId == null)
+                continue;
             String status = str(item.get("status")).strip();
             String valorTexto = str(item.get("valor_texto")).strip();
-            if (status.isEmpty() && !valorTexto.isEmpty()) status = "Ok";
-            if (status.isEmpty()) continue;
+            if (status.isEmpty() && !valorTexto.isEmpty())
+                status = "Ok";
+            if (status.isEmpty())
+                continue;
 
             ChecklistResposta resp = new ChecklistResposta();
             resp.setChecklistId(checklist.getId());
@@ -184,10 +208,12 @@ public class ChecklistService {
         if (sala != null && Boolean.TRUE.equals(sala.getMultiOperador())) {
             @SuppressWarnings("unchecked")
             List<String> cabineOps = body.get("operadores_cabine") instanceof List
-                    ? (List<String>) body.get("operadores_cabine") : List.of();
+                    ? (List<String>) body.get("operadores_cabine")
+                    : List.of();
             @SuppressWarnings("unchecked")
             List<String> plenarioOps = body.get("operadores_plenario") instanceof List
-                    ? (List<String>) body.get("operadores_plenario") : List.of();
+                    ? (List<String>) body.get("operadores_plenario")
+                    : List.of();
 
             for (String opId : cabineOps) {
                 ChecklistOperador co = new ChecklistOperador();
@@ -223,8 +249,11 @@ public class ChecklistService {
 
         String dataOperacao = str(body.get("data_operacao")).strip();
         int salaId;
-        try { salaId = Integer.parseInt(str(body.get("sala_id")).strip()); }
-        catch (Exception e) { throw new ServiceValidationException("Local inválido."); }
+        try {
+            salaId = Integer.parseInt(str(body.get("sala_id")).strip());
+        } catch (Exception e) {
+            throw new ServiceValidationException("Local inválido.");
+        }
         String observacoes = blankToNull(str(body.get("observacoes")));
 
         @SuppressWarnings("unchecked")
@@ -232,8 +261,8 @@ public class ChecklistService {
         validarItens(itens);
 
         // Snapshot para histórico
-        Checklist cl = checklistRepo.findById(checklistId).orElseThrow(() ->
-                new ServiceValidationException("Checklist não encontrado."));
+        Checklist cl = checklistRepo.findById(checklistId)
+                .orElseThrow(() -> new ServiceValidationException("Checklist não encontrado."));
 
         List<Object[]> respostasRows = respostaRepo.findByChecklistIdNative(checklistId);
         Map<String, Object> snapshot = new LinkedHashMap<>();
@@ -264,8 +293,10 @@ public class ChecklistService {
         if (!opSnap.isEmpty()) {
             List<String> snapCabine = new ArrayList<>(), snapPlenario = new ArrayList<>();
             for (ChecklistOperador co : opSnap) {
-                if ("CABINE".equals(co.getPapel())) snapCabine.add(co.getOperadorId());
-                else snapPlenario.add(co.getOperadorId());
+                if ("CABINE".equals(co.getPapel()))
+                    snapCabine.add(co.getOperadorId());
+                else
+                    snapPlenario.add(co.getOperadorId());
             }
             snapshot.put("operadores_cabine", snapCabine);
             snapshot.put("operadores_plenario", snapPlenario);
@@ -273,8 +304,11 @@ public class ChecklistService {
 
         // Salvar histórico
         String snapshotJson;
-        try { snapshotJson = objectMapper.writeValueAsString(snapshot); }
-        catch (JsonProcessingException e) { snapshotJson = "{}"; }
+        try {
+            snapshotJson = objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            snapshotJson = "{}";
+        }
 
         ChecklistHistorico hist = new ChecklistHistorico();
         hist.setChecklistId(checklistId);
@@ -291,7 +325,8 @@ public class ChecklistService {
         cl.setSalaId(salaId);
         cl.setObservacoes(observacoes);
         cl.setEditado(true);
-        if (obsMudou) cl.setObservacoesEditado(true);
+        if (obsMudou)
+            cl.setObservacoesEditado(true);
         cl.setAtualizadoPor(userId);
         checklistRepo.save(cl);
 
@@ -301,9 +336,14 @@ public class ChecklistService {
             Integer tid = resolveItemTipoId(item, Map.of());
             if (tid == null) {
                 Object idRaw = item.get("item_tipo_id");
-                if (idRaw != null) try { tid = Integer.parseInt(idRaw.toString()); } catch (Exception e) {}
+                if (idRaw != null)
+                    try {
+                        tid = Integer.parseInt(idRaw.toString());
+                    } catch (Exception e) {
+                    }
             }
-            if (tid != null) itensTipoEnviados.add(tid);
+            if (tid != null)
+                itensTipoEnviados.add(tid);
         }
 
         // Deletar respostas de itens que não pertencem à nova sala
@@ -323,15 +363,22 @@ public class ChecklistService {
             if (tipoId == null) {
                 Object idRaw = item.get("item_tipo_id");
                 if (idRaw != null) {
-                    try { tipoId = Integer.parseInt(idRaw.toString()); } catch (Exception e) { continue; }
+                    try {
+                        tipoId = Integer.parseInt(idRaw.toString());
+                    } catch (Exception e) {
+                        continue;
+                    }
                 }
-                if (tipoId == null) continue;
+                if (tipoId == null)
+                    continue;
             }
 
             String status = str(item.get("status")).strip();
             String valorTexto = str(item.get("valor_texto")).strip();
-            if (status.isEmpty() && !valorTexto.isEmpty()) status = "Ok";
-            if (status.isEmpty()) continue;
+            if (status.isEmpty() && !valorTexto.isEmpty())
+                status = "Ok";
+            if (status.isEmpty())
+                continue;
 
             String descFalha = blankToNull(str(item.get("descricao_falha")));
             String valorTextoNull = blankToNull(valorTexto);
@@ -347,7 +394,8 @@ public class ChecklistService {
                 resp.setStatus(StatusResposta.fromValor(status));
                 resp.setDescricaoFalha(descFalha);
                 resp.setValorTexto(valorTextoNull);
-                if (mudou) resp.setEditado(true);
+                if (mudou)
+                    resp.setEditado(true);
                 resp.setAtualizadoPor(userId);
                 respostaRepo.save(resp);
                 totalAtualizado++;
@@ -377,10 +425,12 @@ public class ChecklistService {
         if (isMultiOp) {
             @SuppressWarnings("unchecked")
             List<String> cabineOps = body.get("operadores_cabine") instanceof List
-                    ? (List<String>) body.get("operadores_cabine") : null;
+                    ? (List<String>) body.get("operadores_cabine")
+                    : null;
             @SuppressWarnings("unchecked")
             List<String> plenarioOps = body.get("operadores_plenario") instanceof List
-                    ? (List<String>) body.get("operadores_plenario") : null;
+                    ? (List<String>) body.get("operadores_plenario")
+                    : null;
 
             // Só atualiza se o frontend enviou os dados
             if (cabineOps != null || plenarioOps != null) {
@@ -414,7 +464,8 @@ public class ChecklistService {
 
     /**
      * GET /api/forms/checklist/itens-tipo?sala_id=...
-     * Equivale a checklist_itens_tipo_view() + list_checklist_itens_por_sala() do Python.
+     * Equivale a checklist_itens_tipo_view() + list_checklist_itens_por_sala() do
+     * Python.
      */
     public List<Map<String, Object>> itensTipoPorSala(int salaId) {
         List<Object[]> rows = itemTipoRepo.findItensPorSala(salaId);
