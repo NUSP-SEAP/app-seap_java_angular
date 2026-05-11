@@ -24,6 +24,7 @@ export class AuthService {
   role = this._role.asReadonly();
   isLoggedIn = computed(() => !!this._token());
   isAdmin = computed(() => this._role() === 'administrador');
+  isTecnico = computed(() => this._role() === 'tecnico');
 
   constructor(private http: HttpClient, private router: Router) {
     this.loadFromStorage();

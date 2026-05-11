@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { homeRouteForRole } from '../../core/helpers/auth.helpers';
 
 @Component({
   selector: 'app-login',
@@ -144,7 +145,7 @@ export class LoginComponent {
 
   constructor() {
     if (this.auth.isLoggedIn()) {
-      this.router.navigate([this.auth.isAdmin() ? '/admin' : '/home']);
+      this.router.navigate([homeRouteForRole(this.auth.role())]);
     }
   }
 
@@ -162,8 +163,7 @@ export class LoginComponent {
         this.loading.set(false);
         if (res.token) {
           const role = res.role || res.user?.role || 'operador';
-          const target = role === 'administrador' ? '/admin' : '/home';
-          this.router.navigate([target]);
+          this.router.navigate([homeRouteForRole(role)]);
         } else {
           this.errorMsg.set('Usuário ou senha incorretos.');
         }
