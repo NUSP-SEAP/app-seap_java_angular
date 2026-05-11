@@ -4,6 +4,7 @@ import br.leg.senado.nusp.entity.AuthSession;
 import br.leg.senado.nusp.repository.AdministradorRepository;
 import br.leg.senado.nusp.repository.AuthSessionRepository;
 import br.leg.senado.nusp.repository.OperadorRepository;
+import br.leg.senado.nusp.repository.TecnicoRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +22,7 @@ public class AuthService {
 
     private final OperadorRepository operadorRepository;
     private final AdministradorRepository administradorRepository;
+    private final TecnicoRepository tecnicoRepository;
     private final AuthSessionRepository authSessionRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
@@ -43,6 +45,10 @@ public class AuthService {
                 UNION ALL
                 SELECT 'operador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
                 FROM PES_OPERADOR
+                WHERE USERNAME = :usuario OR EMAIL = :usuario
+                UNION ALL
+                SELECT 'tecnico' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
+                FROM PES_TECNICO
                 WHERE USERNAME = :usuario OR EMAIL = :usuario
                 FETCH FIRST 1 ROWS ONLY
                 """;
@@ -112,7 +118,8 @@ public class AuthService {
      * Equivale ao get_foto_url_by_id() do Python.
      */
     public String getFotoUrl(String userId, String role) {
-        if (!"operador".equals(role)) return "";
-        return operadorRepository.findFotoUrlById(userId).orElse("");
+        if ("operador".equals(role)) return operadorRepository.findFotoUrlById(userId).orElse("");
+        if ("tecnico".equals(role))  return tecnicoRepository.findFotoUrlById(userId).orElse("");
+        return "";
     }
 }

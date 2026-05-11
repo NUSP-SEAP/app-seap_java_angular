@@ -50,6 +50,25 @@ public class AdminCrudController {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
+    // ══ Criação de Técnico ══════════════════════════════════════
+
+    @PostMapping("/tecnicos/novo")
+    public ResponseEntity<?> tecnicoNovo(
+            @RequestParam(value = "nome_completo", required = false) String nomeCompleto,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "username", required = false) String username,
+            @RequestParam(value = "senha", required = false) String senha,
+            @RequestParam(value = "foto", required = false) MultipartFile foto) {
+
+        Map<String, Object> tecnico = crudService.criarTecnico(
+                nomeCompleto, email, username, senha, foto);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ok", true);
+        body.put("tecnico", tecnico);
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
     // ══ Criação de Administrador ════════════════════════════════
 
     @PostMapping("/admins/novo")

@@ -32,6 +32,7 @@ public class AdminCrudService {
 
     private final OperadorRepository operadorRepo;
     private final AdministradorRepository administradorRepo;
+    private final TecnicoRepository tecnicoRepo;
     private final SalaRepository salaRepo;
     private final ComissaoRepository comissaoRepo;
     private final ChecklistItemTipoRepository itemTipoRepo;
@@ -46,6 +47,9 @@ public class AdminCrudService {
 
     @Value("${app.files.operadores-dirname}")
     private String operadoresDirname;
+
+    @Value("${app.files.tecnicos-dirname}")
+    private String tecnicosDirname;
 
     @Value("${app.admin.master-username}")
     private String masterUsername;
@@ -70,21 +74,11 @@ public class AdminCrudService {
         email = email.strip().toLowerCase();
         username = username.strip().toLowerCase();
         validateUsername(username);
-
-        boolean emailExists = operadorRepo.findByEmail(email).isPresent();
-        boolean usernameExists = operadorRepo.findByUsername(username).isPresent();
-        if (emailExists || usernameExists) {
-            String msg;
-            if (emailExists && usernameExists) msg = "E-mail e usuário já cadastrados";
-            else if (emailExists) msg = "E-mail já cadastrado";
-            else msg = "Nome de usuário já cadastrado";
-            throw new ServiceValidationException("conflict", HttpStatus.CONFLICT,
-                    Map.of("message", msg));
-        }
+        verificarConflitoUsernameEmail(email, username);
 
         String fotoUrl = "";
         if (foto != null && !foto.isEmpty()) {
-            fotoUrl = salvarFoto(username, foto);
+            fotoUrl = salvarFoto(username, foto, operadoresDirname);
         }
 
         Operador op = new Operador();
@@ -107,22 +101,22 @@ public class AdminCrudService {
         return result;
     }
 
-    private String salvarFoto(String username, MultipartFile foto) {
+    private String salvarFoto(String username, MultipartFile foto, String dirname) {
         String ext = extractExtension(foto);
         long ts = System.currentTimeMillis();
         String filename = username + "_" + ts + "." + ext;
 
-        Path saveDir = Paths.get(filesDir, operadoresDirname);
+        Path saveDir = Paths.get(filesDir, dirname);
         try {
             Files.createDirectories(saveDir);
             foto.transferTo(saveDir.resolve(filename).toFile());
         } catch (IOException e) {
-            log.error("Erro ao salvar foto do operador: {}", e.getMessage());
+            log.error("Erro ao salvar foto: {}", e.getMessage());
             throw new ServiceValidationException("Erro ao salvar foto",
                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        return filesUrlPrefix.replaceAll("/$", "") + "/" + operadoresDirname + "/" + filename;
+        return filesUrlPrefix.replaceAll("/$", "") + "/" + dirname + "/" + filename;
     }
 
     private String extractExtension(MultipartFile file) {
@@ -151,6 +145,29 @@ public class AdminCrudService {
         }
     }
 
+    /**
+     * Garante unicidade global de username e email entre as três tabelas de
+     * usuários (PES_OPERADOR, PES_ADMINISTRADOR, PES_TECNICO). A unicidade
+     * dentro de cada tabela é garantida pelo schema; entre tabelas, é validada
+     * aqui na aplicação.
+     */
+    private void verificarConflitoUsernameEmail(String email, String username) {
+        boolean emailExists = operadorRepo.findByEmail(email).isPresent()
+                || administradorRepo.findByEmail(email).isPresent()
+                || tecnicoRepo.findByEmail(email).isPresent();
+        boolean usernameExists = operadorRepo.findByUsername(username).isPresent()
+                || administradorRepo.findByUsername(username).isPresent()
+                || tecnicoRepo.findByUsername(username).isPresent();
+        if (emailExists || usernameExists) {
+            String msg;
+            if (emailExists && usernameExists) msg = "E-mail e usuário já cadastrados";
+            else if (emailExists) msg = "E-mail já cadastrado";
+            else msg = "Nome de usuário já cadastrado";
+            throw new ServiceValidationException("conflict", HttpStatus.CONFLICT,
+                    Map.of("message", msg));
+        }
+    }
+
     // ══ Criação de Administrador ════════════════════════════════
 
     @Transactional
@@ -174,17 +191,7 @@ public class AdminCrudService {
         email = email.strip().toLowerCase();
         username = username.strip().toLowerCase();
         validateUsername(username);
-
-        boolean emailExists = administradorRepo.findByEmail(email).isPresent();
-        boolean usernameExists = administradorRepo.findByUsername(username).isPresent();
-        if (emailExists || usernameExists) {
-            String msg;
-            if (emailExists && usernameExists) msg = "E-mail e usuário já cadastrados";
-            else if (emailExists) msg = "E-mail já cadastrado";
-            else msg = "Nome de usuário já cadastrado";
-            throw new ServiceValidationException("conflict", HttpStatus.CONFLICT,
-                    Map.of("message", msg));
-        }
+        verificarConflitoUsernameEmail(email, username);
 
         Administrador admin = new Administrador();
         admin.setNomeCompleto(nomeCompleto.strip());
@@ -198,6 +205,49 @@ public class AdminCrudService {
         result.put("nome_completo", admin.getNomeCompleto());
         result.put("email", admin.getEmail());
         result.put("username", admin.getUsername());
+        return result;
+    }
+
+    // ══ Criação de Técnico ══════════════════════════════════════
+
+    @Transactional
+    public Map<String, Object> criarTecnico(String nomeCompleto, String email,
+                                             String username, String senha,
+                                             MultipartFile foto) {
+        List<String> faltantes = new ArrayList<>();
+        if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
+        if (isBlank(email))        faltantes.add("email");
+        if (isBlank(username))     faltantes.add("username");
+        if (isBlank(senha))        faltantes.add("senha");
+        if (!faltantes.isEmpty()) {
+            throw new ServiceValidationException("invalid_payload", HttpStatus.BAD_REQUEST,
+                    Map.of("missing", String.join(", ", faltantes)));
+        }
+
+        email = email.strip().toLowerCase();
+        username = username.strip().toLowerCase();
+        validateUsername(username);
+        verificarConflitoUsernameEmail(email, username);
+
+        String fotoUrl = "";
+        if (foto != null && !foto.isEmpty()) {
+            fotoUrl = salvarFoto(username, foto, tecnicosDirname);
+        }
+
+        Tecnico tec = new Tecnico();
+        tec.setNomeCompleto(nomeCompleto.strip());
+        tec.setEmail(email);
+        tec.setUsername(username);
+        tec.setPasswordHash(passwordEncoder.encode(senha));
+        tec.setFotoUrl(fotoUrl.isEmpty() ? null : fotoUrl);
+        tec = tecnicoRepo.save(tec);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", tec.getId());
+        result.put("nome_completo", tec.getNomeCompleto());
+        result.put("email", tec.getEmail());
+        result.put("username", tec.getUsername());
+        result.put("foto_url", tec.getFotoUrl() != null ? tec.getFotoUrl() : "");
         return result;
     }
 
