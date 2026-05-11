@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/006-escala-funcao.yaml
   - include:
       file: db/changelog/007-demais-salas.yaml
+  - include:
+      file: db/changelog/008-pes-tecnico.yaml

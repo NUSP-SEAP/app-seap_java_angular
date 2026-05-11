@@ -45,6 +45,7 @@ app:
     dir: ${FILES_DIR}
     url-prefix: ${FILES_URL_PREFIX:/files/}
     operadores-dirname: operadores
+    tecnicos-dirname: tecnicos
   password-reset:
     token-ttl-minutes: ${PASSWORD_RESET_TTL_MIN:30}
     base-url: ${APP_BASE_URL:http://localhost:4200}
