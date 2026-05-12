@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/007-demais-salas.yaml
   - include:
       file: db/changelog/008-pes-tecnico.yaml
+  - include:
+      file: db/changelog/009-senha-provisoria.yaml

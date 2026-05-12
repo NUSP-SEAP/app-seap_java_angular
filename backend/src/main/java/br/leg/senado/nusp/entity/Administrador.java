@@ -26,6 +26,9 @@ public class Administrador extends AuditableEntity {
     @Column(name = "PASSWORD_HASH", nullable = false)
     private String passwordHash;
 
+    @Column(name = "SENHA_PROVISORIA", nullable = false)
+    private Boolean senhaProvisoria = false;
+
     /** Substitui extensão citext — armazena sempre em lowercase */
     public void setEmail(String email) {
         this.email = email != null ? email.toLowerCase() : null;

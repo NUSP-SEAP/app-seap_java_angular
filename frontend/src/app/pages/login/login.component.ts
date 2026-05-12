@@ -145,7 +145,11 @@ export class LoginComponent {
 
   constructor() {
     if (this.auth.isLoggedIn()) {
-      this.router.navigate([homeRouteForRole(this.auth.role())]);
+      if (this.auth.senhaProvisoria()) {
+        this.router.navigate(['/alterar-senha']);
+      } else {
+        this.router.navigate([homeRouteForRole(this.auth.role())]);
+      }
     }
   }
 
@@ -162,6 +166,10 @@ export class LoginComponent {
       next: (res) => {
         this.loading.set(false);
         if (res.token) {
+          if (res.user?.senhaProvisoria) {
+            this.router.navigate(['/alterar-senha']);
+            return;
+          }
           const role = res.role || res.user?.role || 'operador';
           this.router.navigate([homeRouteForRole(role)]);
         } else {

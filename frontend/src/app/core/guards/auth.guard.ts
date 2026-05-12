@@ -3,14 +3,20 @@ import { CanActivateFn, CanMatchFn, Route, Router, UrlSegment } from '@angular/r
 import { AuthService } from '../services/auth.service';
 import { homeRouteForRole } from '../helpers/auth.helpers';
 
-/** Garante apenas que o usuário está logado. */
+/** Garante apenas que o usuário está logado. Bloqueia acesso ao app se senha for provisória. */
 export const authGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isLoggedIn()) return true;
-  router.navigate(['/login']);
-  return false;
+  if (!auth.isLoggedIn()) {
+    router.navigate(['/login']);
+    return false;
+  }
+  if (auth.senhaProvisoria()) {
+    router.navigate(['/alterar-senha']);
+    return false;
+  }
+  return true;
 };
 
 /**

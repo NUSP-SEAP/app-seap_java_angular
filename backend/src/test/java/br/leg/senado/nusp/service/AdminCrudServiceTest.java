@@ -27,6 +27,7 @@ class AdminCrudServiceTest {
 
     @Mock private OperadorRepository operadorRepo;
     @Mock private AdministradorRepository administradorRepo;
+    @Mock private TecnicoRepository tecnicoRepo;
     @Mock private SalaRepository salaRepo;
     @Mock private ComissaoRepository comissaoRepo;
     @Mock private ChecklistItemTipoRepository itemTipoRepo;

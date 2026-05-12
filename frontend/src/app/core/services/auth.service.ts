@@ -25,6 +25,7 @@ export class AuthService {
   isLoggedIn = computed(() => !!this._token());
   isAdmin = computed(() => this._role() === 'administrador');
   isTecnico = computed(() => this._role() === 'tecnico');
+  senhaProvisoria = computed(() => !!this._user()?.senhaProvisoria);
 
   constructor(private http: HttpClient, private router: Router) {
     this.loadFromStorage();
@@ -77,6 +78,15 @@ export class AuthService {
         tap(res => { if (res.ok && res.token) this.saveToken(res.token); }),
         catchError(() => { this.clearSession(); return of(null); })
       );
+  }
+
+  /** Limpa a flag senhaProvisoria após o usuário trocar a senha com sucesso. */
+  clearSenhaProvisoria(): void {
+    const u = this._user();
+    if (!u) return;
+    const updated: User = { ...u, senhaProvisoria: false };
+    this._user.set(updated);
+    localStorage.setItem(USER_KEY, JSON.stringify({ user: updated, role: this._role() }));
   }
 
   // ══ Token ═════════════════════════════════════════════════════

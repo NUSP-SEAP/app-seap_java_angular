@@ -79,6 +79,7 @@ public class AuthController {
 
         boolean isAdmin = "administrador".equals(user.get("perfil"));
         String uname = user.get("username");
+        boolean senhaProvisoria = "1".equals(user.get("senha_provisoria"));
 
         return ResponseEntity.ok(Map.of(
                 "token", token,
@@ -91,7 +92,8 @@ public class AuthController {
                         Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
                         Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
                         Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername)),
-                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername))
+                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername)),
+                        Map.entry("senhaProvisoria",      senhaProvisoria)
                 )
         ));
     }
@@ -105,6 +107,7 @@ public class AuthController {
         String fotoUrl = authService.getFotoUrl(principal.getId(), principal.getRole());
         boolean isAdmin = "administrador".equals(principal.getRole());
         String uname = principal.getUsername();
+        boolean senhaProvisoria = authService.isSenhaProvisoria(principal.getId(), principal.getRole());
 
         return ResponseEntity.ok(Map.of(
                 "ok",   true,
@@ -116,11 +119,35 @@ public class AuthController {
                         Map.entry("foto_url", fotoUrl != null ? fotoUrl : ""),
                         Map.entry("canEditObsSupervisor", isAdmin && uname.equalsIgnoreCase(supervisorUsername)),
                         Map.entry("canEditObsChefe",      isAdmin && uname.equalsIgnoreCase(chefeUsername)),
-                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername))
+                        Map.entry("isMaster",             isAdmin && uname.equalsIgnoreCase(masterUsername)),
+                        Map.entry("senhaProvisoria",      senhaProvisoria)
                 ),
                 "role", principal.getRole(),
                 "exp",  principal.getExp()
         ));
+    }
+
+    // =========================================================================
+    // POST /api/auth/change-password
+    // Troca a senha do usuário autenticado. Limpa a flag SENHA_PROVISORIA.
+    // Body: { "novaSenha": "..." }
+    // =========================================================================
+    @PostMapping("/auth/change-password")
+    public ResponseEntity<?> changePassword(@AuthenticationPrincipal UserPrincipal principal,
+                                            @RequestBody Map<String, String> body) {
+        String novaSenha = body.getOrDefault("novaSenha", "").strip();
+        if (novaSenha.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "Senha vazia."));
+        }
+        if (novaSenha.length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "A senha deve ter no mínimo 6 caracteres."));
+        }
+
+        boolean ok = authService.changePassword(principal.getId(), principal.getRole(), novaSenha);
+        if (!ok) {
+            return ResponseEntity.status(500).body(Map.of("ok", false, "message", "Falha ao trocar senha."));
+        }
+        return ResponseEntity.ok(Map.of("ok", true, "message", "Senha alterada com sucesso."));
     }
 
     // =========================================================================

@@ -5,6 +5,7 @@ export const routes: Routes = [
   { path: 'login', title: 'Login | Senado NUSP', loadComponent: () => import('./pages/login/login.component').then(m => m.LoginComponent) },
   { path: 'forgot-password', title: 'Esqueci a Senha | Senado NUSP', loadComponent: () => import('./pages/login/forgot-password.component').then(m => m.ForgotPasswordComponent) },
   { path: 'reset-password', title: 'Redefinir Senha | Senado NUSP', loadComponent: () => import('./pages/login/reset-password.component').then(m => m.ResetPasswordComponent) },
+  { path: 'alterar-senha', title: 'Alterar Senha | Senado NUSP', loadComponent: () => import('./pages/login/alterar-senha.component').then(m => m.AlterarSenhaComponent) },
   {
     path: '',
     loadComponent: () => import('./layout/main-layout.component').then(m => m.MainLayoutComponent),

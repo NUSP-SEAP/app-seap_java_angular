@@ -198,6 +198,7 @@ public class AdminCrudService {
         admin.setEmail(email);
         admin.setUsername(username);
         admin.setPasswordHash(passwordEncoder.encode(senha));
+        admin.setSenhaProvisoria(true);
         admin = administradorRepo.save(admin);
 
         Map<String, Object> result = new LinkedHashMap<>();

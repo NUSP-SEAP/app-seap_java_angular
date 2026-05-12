@@ -39,15 +39,15 @@ public class AuthService {
     @SuppressWarnings("unchecked")
     public Map<String, String> findUserForLogin(String usuario) {
         String sql = """
-                SELECT 'administrador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
+                SELECT 'administrador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH, SENHA_PROVISORIA
                 FROM PES_ADMINISTRADOR
                 WHERE USERNAME = :usuario OR EMAIL = :usuario
                 UNION ALL
-                SELECT 'operador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
+                SELECT 'operador' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH, SENHA_PROVISORIA
                 FROM PES_OPERADOR
                 WHERE USERNAME = :usuario OR EMAIL = :usuario
                 UNION ALL
-                SELECT 'tecnico' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH
+                SELECT 'tecnico' AS PERFIL, ID, NOME_COMPLETO, USERNAME, EMAIL, PASSWORD_HASH, SENHA_PROVISORIA
                 FROM PES_TECNICO
                 WHERE USERNAME = :usuario OR EMAIL = :usuario
                 FETCH FIRST 1 ROWS ONLY
@@ -62,13 +62,60 @@ public class AuthService {
 
         Object[] row = rows.get(0);
         Map<String, String> user = new HashMap<>();
-        user.put("perfil",        String.valueOf(row[0]));
-        user.put("id",            String.valueOf(row[1]));
-        user.put("nome_completo", String.valueOf(row[2]));
-        user.put("username",      String.valueOf(row[3]));
-        user.put("email",         String.valueOf(row[4]));
-        user.put("password_hash", String.valueOf(row[5]));
+        user.put("perfil",            String.valueOf(row[0]));
+        user.put("id",                String.valueOf(row[1]));
+        user.put("nome_completo",     String.valueOf(row[2]));
+        user.put("username",          String.valueOf(row[3]));
+        user.put("email",             String.valueOf(row[4]));
+        user.put("password_hash",     String.valueOf(row[5]));
+        user.put("senha_provisoria",  row[6] != null && ((Number) row[6]).intValue() == 1 ? "1" : "0");
         return user;
+    }
+
+    /**
+     * Verifica se o usuário tem senha provisória (precisa trocar antes de acessar).
+     * Procura nas três tabelas (administrador, operador, técnico).
+     */
+    @SuppressWarnings("unchecked")
+    public boolean isSenhaProvisoria(String userId, String role) {
+        String table = switch (role) {
+            case "administrador" -> "PES_ADMINISTRADOR";
+            case "operador"      -> "PES_OPERADOR";
+            case "tecnico"       -> "PES_TECNICO";
+            default -> null;
+        };
+        if (table == null) return false;
+
+        List<Number> rows = entityManager
+                .createNativeQuery("SELECT SENHA_PROVISORIA FROM " + table + " WHERE ID = :id")
+                .setParameter("id", userId)
+                .getResultList();
+
+        return !rows.isEmpty() && rows.get(0) != null && rows.get(0).intValue() == 1;
+    }
+
+    /**
+     * Troca a senha do usuário autenticado e limpa a flag SENHA_PROVISORIA.
+     * Não exige senha atual — supõe que o caller já está autenticado e quer apenas trocar.
+     * @return true se a senha foi atualizada.
+     */
+    @Transactional
+    public boolean changePassword(String userId, String role, String novaSenha) {
+        String table = switch (role) {
+            case "administrador" -> "PES_ADMINISTRADOR";
+            case "operador"      -> "PES_OPERADOR";
+            case "tecnico"       -> "PES_TECNICO";
+            default -> null;
+        };
+        if (table == null) return false;
+
+        String hash = passwordEncoder.encode(novaSenha);
+        int updated = entityManager.createNativeQuery(
+                "UPDATE " + table + " SET PASSWORD_HASH = :hash, SENHA_PROVISORIA = 0, ATUALIZADO_EM = SYSTIMESTAMP WHERE ID = :id")
+                .setParameter("hash", hash)
+                .setParameter("id", userId)
+                .executeUpdate();
+        return updated > 0;
     }
 
     /**

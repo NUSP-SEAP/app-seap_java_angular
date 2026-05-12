@@ -9,6 +9,7 @@ export interface User {
   canEditObsSupervisor?: boolean;
   canEditObsChefe?: boolean;
   isMaster?: boolean;
+  senhaProvisoria?: boolean;
 }
 
 export interface LoginResponse {
