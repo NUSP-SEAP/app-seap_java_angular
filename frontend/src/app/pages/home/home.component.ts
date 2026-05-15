@@ -209,6 +209,7 @@ interface TableState extends ListParams {
             <tr>
               <th><app-column-filter [col]="opCols[0]" [distinctValues]="gd(opMeta(),'sala')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
               <th><app-column-filter [col]="opCols[1]" [distinctValues]="gd(opMeta(),'data')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
+              <th>Evento</th>
               <th style="text-align:center"><span class="sort-header" (click)="onOpSort({sort:'hora_entrada', direction: opState.sort==='hora_entrada' && opState.direction==='asc' ? 'desc' : 'asc'})">Início Operação <span class="sort-arrow">{{ opState.sort==='hora_entrada' ? (opState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
               <th style="text-align:center"><span class="sort-header" (click)="onOpSort({sort:'hora_saida', direction: opState.sort==='hora_saida' && opState.direction==='asc' ? 'desc' : 'asc'})">Fim Operação <span class="sort-arrow">{{ opState.sort==='hora_saida' ? (opState.direction==='asc' ? '\u25B2' : '\u25BC') : '\u25BD' }}</span></span></th>
               <th style="text-align:center"><app-column-filter [col]="opCols[2]" [distinctValues]="gd(opMeta(),'anormalidade')" [currentSort]="opState.sort" [currentDir]="opState.direction" (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" /></th>
@@ -217,14 +218,15 @@ interface TableState extends ListParams {
           </thead>
           <tbody>
             @if (opLoading()) {
-              <tr><td colspan="6" class="empty-state">Carregando operações...</td></tr>
+              <tr><td colspan="7" class="empty-state">Carregando operações...</td></tr>
             } @else if (opRows().length === 0) {
-              <tr><td colspan="6" class="empty-state">Nenhuma operação encontrada.</td></tr>
+              <tr><td colspan="7" class="empty-state">Nenhuma operação encontrada.</td></tr>
             } @else {
               @for (op of opRows(); track op['id'] || op['entrada_id']) {
                 <tr>
                   <td><strong>{{ op['sala'] || op['sala_nome'] }}</strong></td>
                   <td>{{ op['data'] | fmtDate }}</td>
+                  <td [title]="formatEvento(op)">{{ truncate(formatEvento(op), 30) }}</td>
                   <td style="text-align:center">{{ op['hora_entrada'] | fmtTime }}</td>
                   <td style="text-align:center">{{ op['hora_saida'] | fmtTime }}</td>
                   <td style="text-align:center">
@@ -510,6 +512,25 @@ export class HomeComponent implements OnInit {
   intVal(obj: Record<string, unknown>, key: string): number {
     const v = obj[key];
     return typeof v === 'number' ? v : parseInt(String(v || '0'), 10);
+  }
+
+  strVal(obj: Record<string, unknown>, key: string): string {
+    const v = obj[key];
+    return v == null ? '' : String(v);
+  }
+
+  truncate(s: string, max: number): string {
+    return s.length > max ? s.substring(0, max) + '...' : s;
+  }
+
+  formatEvento(op: Record<string, unknown>): string {
+    const evento = this.strVal(op, 'nome_evento');
+    const comissao = this.strVal(op, 'comissao_nome');
+    if (!evento) return '';
+    if (!comissao) return evento;
+    const idx = comissao.indexOf(' - ');
+    const sigla = idx >= 0 ? comissao.substring(0, idx).trim() : comissao.trim();
+    return sigla + ' - ' + evento;
   }
 
   gd = getDistinct;

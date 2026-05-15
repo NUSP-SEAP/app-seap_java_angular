@@ -20,9 +20,18 @@ import { ApiService } from '../../core/services/api.service';
           <div class="form-row"><label>Senha *</label><input type="password" [(ngModel)]="senha" name="senha" required minlength="6"></div>
           <div class="form-row"><label>Confirmar Senha *</label><input type="password" [(ngModel)]="confirmarSenha" name="confirmar_senha" required></div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px">
-          <input type="checkbox" [(ngModel)]="plenarioPrincipal" name="plenario_principal" id="plenario_principal" style="width:auto; margin:0">
-          <label for="plenario_principal" style="margin:0; cursor:pointer; font-weight:500; font-size:.9375rem">Operador de Plenário Principal</label>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+          <input type="checkbox" [(ngModel)]="plenarioPrincipal" name="plenario_principal"
+                 id="plenario_principal" (change)="onPlenarioChange()"
+                 style="width:auto; margin:0">
+          <label for="plenario_principal" style="margin:0; cursor:pointer; font-weight:500; font-size:.9375rem">Apto a operar no Plenário Principal</label>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; padding-left:24px">
+          <input type="checkbox" [(ngModel)]="plenarioPrincipalFixo" name="plenario_principal_fixo"
+                 id="plenario_principal_fixo" [disabled]="!plenarioPrincipal"
+                 style="width:auto; margin:0">
+          <label for="plenario_principal_fixo" style="margin:0; cursor:pointer; font-weight:500; font-size:.9375rem"
+                 [style.color]="plenarioPrincipal ? null : '#94a3b8'">Operador fixo do Plenário Principal</label>
         </div>
         <div class="form-row">
           <label>Foto (opcional)</label>
@@ -52,7 +61,8 @@ export class AdminNovoOperadorComponent {
   private api = inject(ApiService);
   private router = inject(Router);
 
-  nomeCompleto=''; nomeExibicao=''; email=''; username=''; senha=''; confirmarSenha=''; plenarioPrincipal=false;
+  nomeCompleto=''; nomeExibicao=''; email=''; username=''; senha=''; confirmarSenha='';
+  plenarioPrincipal=false; plenarioPrincipalFixo=false;
   foto: File | null = null;
   saving = signal(false);
   errorMsg = signal('');
@@ -60,6 +70,10 @@ export class AdminNovoOperadorComponent {
   onFileSelect(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.foto = input.files?.[0] || null;
+  }
+
+  onPlenarioChange(): void {
+    if (!this.plenarioPrincipal) this.plenarioPrincipalFixo = false;
   }
 
   onSubmit(): void {
@@ -76,6 +90,7 @@ export class AdminNovoOperadorComponent {
     fd.append('username', this.username);
     fd.append('senha', this.senha);
     fd.append('plenario_principal', String(this.plenarioPrincipal));
+    fd.append('plenario_principal_fixo', String(this.plenarioPrincipal && this.plenarioPrincipalFixo));
     if (this.foto) fd.append('foto', this.foto);
 
     this.api.postForm<any>('/api/admin/operadores/novo', fd).subscribe({

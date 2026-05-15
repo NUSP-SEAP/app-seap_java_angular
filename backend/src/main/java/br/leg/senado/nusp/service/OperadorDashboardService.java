@@ -20,6 +20,18 @@ public class OperadorDashboardService {
 
     private final EntityManager em;
 
+    /** Nome canônico do Plenário Principal (referência em CAD_SALA.NOME). */
+    private static final String SALA_PLENARIO_PRINCIPAL = "Plenário Principal";
+
+    /** True quando o usuário é fixo do Plenário Principal — concede leitura de todos os registros do PP. */
+    private boolean ehFixoPlenarioPrincipal(String userId) {
+        @SuppressWarnings("unchecked")
+        List<Object> rows = em.createNativeQuery(
+                "SELECT 1 FROM PES_OPERADOR WHERE ID = ?1 AND PLENARIO_PRINCIPAL_FIXO = 1")
+                .setParameter(1, userId).getResultList();
+        return !rows.isEmpty();
+    }
+
     // ══ Meus Checklists ═══════════════════════════════════════
 
     private static final String QTDE_OK_EXPR =
@@ -36,6 +48,9 @@ public class OperadorDashboardService {
 
     public PagedResult listMeusChecklists(String userId, int page, int limit,
                                            String sort, String dir, Map<String, Object> filters) {
+        String acessoFixo = ehFixoPlenarioPrincipal(userId)
+                ? " OR s.NOME = '" + SALA_PLENARIO_PRINCIPAL + "'"
+                : "";
         return DashboardQueryHelper.executePagedQuery(em,
                 "c.ID, c.DATA_OPERACAO AS data, s.NOME AS sala_nome, c.TURNO, " +
                 "c.HORA_INICIO_TESTES, c.HORA_TERMINO_TESTES, c.EDITADO, " +
@@ -44,7 +59,9 @@ public class OperadorDashboardService {
                 "(SELECT COUNT(*) FROM FRM_CHECKLIST_RESPOSTA r JOIN FRM_CHECKLIST_ITEM_TIPO t ON t.ID = r.ITEM_TIPO_ID " +
                 "WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha' AND t.TIPO_WIDGET != 'text') AS qtde_falha",
                 "FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID " +
-                "WHERE (c.CRIADO_POR = '" + userId + "' OR EXISTS (SELECT 1 FROM FRM_CHECKLIST_OPERADOR co WHERE co.CHECKLIST_ID = c.ID AND co.OPERADOR_ID = '" + userId + "'))",
+                "WHERE (c.CRIADO_POR = '" + userId + "' " +
+                "OR EXISTS (SELECT 1 FROM FRM_CHECKLIST_OPERADOR co WHERE co.CHECKLIST_ID = c.ID AND co.OPERADOR_ID = '" + userId + "')" +
+                acessoFixo + ")",
                 "c.DATA_OPERACAO", MC_SORT, List.of("s.NOME"),
                 Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME"),
                 Map.of("data", "date", "sala", "text"),
@@ -54,14 +71,25 @@ public class OperadorDashboardService {
     @SuppressWarnings("unchecked")
     public Map<String, Object> getMeuChecklistDetalhe(long checklistId, String userId) {
         @SuppressWarnings("unchecked")
-        List<Object> rows = em.createNativeQuery("""
-                SELECT c.CRIADO_POR FROM FRM_CHECKLIST c WHERE c.ID = ?1
-                UNION
-                SELECT co.OPERADOR_ID FROM FRM_CHECKLIST_OPERADOR co WHERE co.CHECKLIST_ID = ?1
+        List<Object[]> headRows = em.createNativeQuery("""
+                SELECT c.CRIADO_POR, s.NOME
+                  FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID
+                 WHERE c.ID = ?1
                 """).setParameter(1, checklistId).getResultList();
-        if (rows.isEmpty()) throw new ServiceValidationException("Checklist não encontrado.", HttpStatus.NOT_FOUND);
-        boolean isOwner = rows.stream().anyMatch(r -> r != null && userId.equals(r.toString()));
-        if (!isOwner) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        if (headRows.isEmpty()) throw new ServiceValidationException("Checklist não encontrado.", HttpStatus.NOT_FOUND);
+        String criadoPor = str(headRows.get(0)[0]);
+        String salaNome = str(headRows.get(0)[1]);
+
+        @SuppressWarnings("unchecked")
+        List<Object> adicionalRows = em.createNativeQuery(
+                "SELECT 1 FROM FRM_CHECKLIST_OPERADOR WHERE CHECKLIST_ID = ?1 AND OPERADOR_ID = ?2")
+                .setParameter(1, checklistId).setParameter(2, userId).getResultList();
+        boolean ehCriador = userId.equals(criadoPor);
+        boolean ehAdicional = !adicionalRows.isEmpty();
+        boolean ehFixoPP = SALA_PLENARIO_PRINCIPAL.equals(salaNome) && ehFixoPlenarioPrincipal(userId);
+        if (!ehCriador && !ehAdicional && !ehFixoPP)
+            throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        boolean somenteLeitura = !ehCriador && !ehAdicional;
 
         // Reutiliza o detalhe do admin
         List<Object[]> detRows = em.createNativeQuery("""
@@ -150,6 +178,7 @@ public class OperadorDashboardService {
             result.put("operadores_plenario_ids", plenarioIds);
         }
 
+        result.put("somente_leitura", somenteLeitura);
         return result;
     }
 
@@ -163,16 +192,23 @@ public class OperadorDashboardService {
 
     public PagedResult listMinhasOperacoes(String userId, int page, int limit,
                                             String sort, String dir, Map<String, Object> filters) {
+        String acessoFixo = ehFixoPlenarioPrincipal(userId)
+                ? " OR s.NOME = '" + SALA_PLENARIO_PRINCIPAL + "'"
+                : "";
         return DashboardQueryHelper.executePagedQuery(em,
                 "e.ID AS entrada_id, r.DATA AS data, s.NOME AS sala_nome, " +
                 "r.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
-                "e.TIPO_EVENTO, e.NOME_EVENTO, e.HORA_ENTRADA, e.HORA_SAIDA, e.HOUVE_ANORMALIDADE, " +
+                "e.TIPO_EVENTO, e.NOME_EVENTO, c.NOME AS comissao_nome, " +
+                "e.HORA_ENTRADA, e.HORA_SAIDA, e.HOUVE_ANORMALIDADE, " +
                 "a.ID AS anormalidade_id",
                 "FROM OPR_REGISTRO_ENTRADA e " +
                 "JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID " +
                 "JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
+                "LEFT JOIN CAD_COMISSAO c ON c.ID = e.COMISSAO_ID " +
                 "LEFT JOIN OPR_ANORMALIDADE a ON a.ENTRADA_ID = e.ID " +
-                "WHERE (e.OPERADOR_ID = '" + userId + "' OR EXISTS (SELECT 1 FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = e.ID AND eo.OPERADOR_ID = '" + userId + "'))",
+                "WHERE (e.OPERADOR_ID = '" + userId + "' " +
+                "OR EXISTS (SELECT 1 FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = e.ID AND eo.OPERADOR_ID = '" + userId + "')" +
+                acessoFixo + ")",
                 "r.DATA", MO_SORT, List.of("s.NOME", "e.NOME_EVENTO"),
                 Map.of("data", "r.DATA", "sala", "s.NOME", "anormalidade", "e.HOUVE_ANORMALIDADE"),
                 Map.of("data", "date", "sala", "text", "anormalidade", "bool"),
@@ -182,14 +218,27 @@ public class OperadorDashboardService {
     @SuppressWarnings("unchecked")
     public Map<String, Object> getMinhaOperacaoDetalhe(long entradaId, String userId) {
         @SuppressWarnings("unchecked")
-        List<Object> rows = em.createNativeQuery("""
-                SELECT e.OPERADOR_ID FROM OPR_REGISTRO_ENTRADA e WHERE e.ID = ?1
-                UNION
-                SELECT eo.OPERADOR_ID FROM OPR_ENTRADA_OPERADOR eo WHERE eo.ENTRADA_ID = ?1
+        List<Object[]> headRows = em.createNativeQuery("""
+                SELECT e.OPERADOR_ID, s.NOME
+                  FROM OPR_REGISTRO_ENTRADA e
+                  JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
+                  JOIN CAD_SALA s ON s.ID = r.SALA_ID
+                 WHERE e.ID = ?1
                 """).setParameter(1, entradaId).getResultList();
-        if (rows.isEmpty()) throw new ServiceValidationException("Operação não encontrada.", HttpStatus.NOT_FOUND);
-        boolean isOwner = rows.stream().anyMatch(r -> r != null && userId.equals(r.toString()));
-        if (!isOwner) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        if (headRows.isEmpty()) throw new ServiceValidationException("Operação não encontrada.", HttpStatus.NOT_FOUND);
+        String operadorTitular = str(headRows.get(0)[0]);
+        String salaNome = str(headRows.get(0)[1]);
+
+        @SuppressWarnings("unchecked")
+        List<Object> adicionalRows = em.createNativeQuery(
+                "SELECT 1 FROM OPR_ENTRADA_OPERADOR WHERE ENTRADA_ID = ?1 AND OPERADOR_ID = ?2")
+                .setParameter(1, entradaId).setParameter(2, userId).getResultList();
+        boolean ehTitular = userId.equals(operadorTitular);
+        boolean ehAdicional = !adicionalRows.isEmpty();
+        boolean ehFixoPP = SALA_PLENARIO_PRINCIPAL.equals(salaNome) && ehFixoPlenarioPrincipal(userId);
+        if (!ehTitular && !ehAdicional && !ehFixoPP)
+            throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        boolean somenteLeitura = !ehTitular && !ehAdicional;
 
         List<Object[]> detRows = em.createNativeQuery("""
                 SELECT e.ID, r.DATA, s.NOME AS SALA_NOME, e.NOME_EVENTO,
@@ -308,17 +357,23 @@ public class OperadorDashboardService {
             result.put("operador_nome_seguinte", str(nr[1]));
         }
 
+        result.put("somente_leitura", somenteLeitura);
         return result;
     }
 
     public Map<String, Object> getMinhaAnormalidadeDetalhe(long anomId, String userId) {
         @SuppressWarnings("unchecked")
-        List<Object> rows = em.createNativeQuery("""
-                SELECT a.CRIADO_POR FROM OPR_ANORMALIDADE a WHERE a.ID = ?1
+        List<Object[]> headRows = em.createNativeQuery("""
+                SELECT a.CRIADO_POR, s.NOME
+                  FROM OPR_ANORMALIDADE a JOIN CAD_SALA s ON s.ID = a.SALA_ID
+                 WHERE a.ID = ?1
                 """).setParameter(1, anomId).getResultList();
-        if (rows.isEmpty()) throw new ServiceValidationException("Anormalidade não encontrada.", HttpStatus.NOT_FOUND);
-        String owner = rows.get(0) != null ? rows.get(0).toString() : "";
-        if (!owner.equals(userId)) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+        if (headRows.isEmpty()) throw new ServiceValidationException("Anormalidade não encontrada.", HttpStatus.NOT_FOUND);
+        String criadoPor = str(headRows.get(0)[0]);
+        String salaNome = str(headRows.get(0)[1]);
+        boolean ehCriador = userId.equals(criadoPor);
+        boolean ehFixoPP = SALA_PLENARIO_PRINCIPAL.equals(salaNome) && ehFixoPlenarioPrincipal(userId);
+        if (!ehCriador && !ehFixoPP) throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
 
         List<Object[]> detRows = em.createNativeQuery("""
                 SELECT a.ID, a.DATA, s.NOME AS SALA_NOME, a.NOME_EVENTO,

@@ -35,6 +35,9 @@ public class Operador extends AuditableEntity {
     @Column(name = "PLENARIO_PRINCIPAL", nullable = false)
     private Boolean plenarioPrincipal = false;
 
+    @Column(name = "PLENARIO_PRINCIPAL_FIXO", nullable = false)
+    private Boolean plenarioPrincipalFixo = false;
+
     @Column(name = "PARTICIPA_ESCALA", nullable = false)
     private Boolean participaEscala = true;
 

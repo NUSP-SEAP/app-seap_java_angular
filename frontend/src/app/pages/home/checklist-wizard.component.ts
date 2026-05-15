@@ -572,7 +572,7 @@ export class ChecklistWizardComponent implements OnInit {
   }
 
   canEditChecklist(): boolean {
-    return this.editData()?.['criado_por'] === this.auth.user()?.id;
+    return this.editData()?.['somente_leitura'] === false;
   }
 
   enterEditMode(): void { this.readOnly.set(false); }

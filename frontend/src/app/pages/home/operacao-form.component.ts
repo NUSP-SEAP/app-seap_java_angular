@@ -602,7 +602,7 @@ export class OperacaoFormComponent implements OnInit {
   }
 
   canEditOperacao(): boolean {
-    return this.editData()?.['operador_id'] === this.auth.user()?.id;
+    return this.editData()?.['somente_leitura'] === false;
   }
 
   enterEditMode(): void { this.readOnly.set(false); }

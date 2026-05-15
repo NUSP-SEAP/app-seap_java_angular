@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/008-pes-tecnico.yaml
   - include:
       file: db/changelog/009-senha-provisoria.yaml
+  - include:
+      file: db/changelog/010-operador-fixo-plenario-principal.yaml

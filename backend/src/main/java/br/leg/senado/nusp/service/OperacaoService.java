@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,23 @@ public class OperacaoService {
     private final ObjectMapper objectMapper;
 
     // ── Helpers ───────────────────────────────────────────────
+
+    /**
+     * Permissão de edição de uma entrada: apenas o operador titular ou
+     * operadores adicionais (junction OPR_ENTRADA_OPERADOR). Fixos do
+     * Plenário Principal têm leitura via dashboard, mas não escrita.
+     */
+    private void validarPermissaoEdicaoEntrada(long entradaId, String userId) {
+        Number ok = (Number) entityManager.createNativeQuery("""
+                SELECT CASE WHEN EXISTS (
+                    SELECT 1 FROM OPR_REGISTRO_ENTRADA WHERE ID = ?1 AND OPERADOR_ID = ?2
+                    UNION ALL
+                    SELECT 1 FROM OPR_ENTRADA_OPERADOR WHERE ENTRADA_ID = ?1 AND OPERADOR_ID = ?2
+                ) THEN 1 ELSE 0 END FROM DUAL
+                """).setParameter(1, entradaId).setParameter(2, userId).getSingleResult();
+        if (ok.intValue() != 1)
+            throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
+    }
 
     private static String clean(Map<String, Object> body, String key) {
         Object val = body.get(key);
@@ -539,6 +557,7 @@ public class OperacaoService {
     @Transactional
     public Map<String, Object> editarEntrada(long entradaId, Map<String, Object> body, String userId) {
         if (userId == null || userId.isBlank()) throw new ServiceValidationException("Usuário não autenticado.");
+        validarPermissaoEdicaoEntrada(entradaId, userId);
 
         String nomeEvento = blankToNull(clean(body, "nome_evento"));
         String horaInicio = normalizeTime(clean(body, "hora_inicio"));

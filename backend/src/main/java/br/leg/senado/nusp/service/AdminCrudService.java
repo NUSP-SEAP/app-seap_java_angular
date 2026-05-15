@@ -59,7 +59,8 @@ public class AdminCrudService {
     @Transactional
     public Map<String, Object> criarOperador(String nomeCompleto, String nomeExibicao,
                                               String email, String username, String senha,
-                                              MultipartFile foto, boolean plenarioPrincipal) {
+                                              MultipartFile foto, boolean plenarioPrincipal,
+                                              boolean plenarioPrincipalFixo) {
         List<String> faltantes = new ArrayList<>();
         if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
         if (isBlank(nomeExibicao)) faltantes.add("nome_exibicao");
@@ -89,6 +90,7 @@ public class AdminCrudService {
         op.setPasswordHash(passwordEncoder.encode(senha));
         op.setFotoUrl(fotoUrl.isEmpty() ? null : fotoUrl);
         op.setPlenarioPrincipal(plenarioPrincipal);
+        op.setPlenarioPrincipalFixo(plenarioPrincipalFixo);
         op = operadorRepo.save(op);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -518,6 +520,23 @@ public class AdminCrudService {
                         Map.of("message", "Operador não encontrado.")));
         boolean novo = !Boolean.TRUE.equals(op.getPlenarioPrincipal());
         op.setPlenarioPrincipal(novo);
+        // Ao desmarcar "apto", deixa de fazer sentido manter como "fixo" do PP
+        if (!novo) op.setPlenarioPrincipalFixo(false);
+        operadorRepo.save(op);
+        return novo;
+    }
+
+    @Transactional
+    public boolean togglePlenarioPrincipalFixo(String operadorId) {
+        Operador op = operadorRepo.findById(operadorId)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        boolean novo = !Boolean.TRUE.equals(op.getPlenarioPrincipalFixo());
+        if (novo && !Boolean.TRUE.equals(op.getPlenarioPrincipal())) {
+            throw new ServiceValidationException("INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Operador precisa estar apto a Plenário Principal antes de ser marcado como fixo."));
+        }
+        op.setPlenarioPrincipalFixo(novo);
         operadorRepo.save(op);
         return novo;
     }

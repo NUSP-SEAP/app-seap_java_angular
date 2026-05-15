@@ -39,10 +39,12 @@ public class AdminCrudController {
             @RequestParam(value = "username", required = false) String username,
             @RequestParam(value = "senha", required = false) String senha,
             @RequestParam(value = "foto", required = false) MultipartFile foto,
-            @RequestParam(value = "plenario_principal", required = false, defaultValue = "false") boolean plenarioPrincipal) {
+            @RequestParam(value = "plenario_principal", required = false, defaultValue = "false") boolean plenarioPrincipal,
+            @RequestParam(value = "plenario_principal_fixo", required = false, defaultValue = "false") boolean plenarioPrincipalFixo) {
 
         Map<String, Object> operador = crudService.criarOperador(
-                nomeCompleto, nomeExibicao, email, username, senha, foto, plenarioPrincipal);
+                nomeCompleto, nomeExibicao, email, username, senha, foto,
+                plenarioPrincipal, plenarioPrincipalFixo);
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("ok", true);
@@ -110,6 +112,12 @@ public class AdminCrudController {
     public ResponseEntity<?> togglePlenario(@PathVariable String id) {
         boolean novoValor = crudService.togglePlenarioPrincipal(id);
         return ResponseEntity.ok(Map.of("ok", true, "plenario_principal", novoValor));
+    }
+
+    @PatchMapping("/operador/{id}/toggle-plenario-fixo")
+    public ResponseEntity<?> togglePlenarioFixo(@PathVariable String id) {
+        boolean novoValor = crudService.togglePlenarioPrincipalFixo(id);
+        return ResponseEntity.ok(Map.of("ok", true, "plenario_principal_fixo", novoValor));
     }
 
     // ══ Atualizar Turno ════════════════════════════════════════

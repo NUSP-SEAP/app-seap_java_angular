@@ -57,12 +57,13 @@ interface TableState extends ListParams {
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
             <th style="width:130px">Turno</th>
-            <th style="width:120px">Op. Plenário</th>
+            <th style="width:90px" title="Apto a operar no Plenário Principal">Apto PP</th>
+            <th style="width:90px" title="Operador fixo do Plenário Principal">Fixo PP</th>
             <th style="width:80px">Escala</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
-              <tr><td colspan="5" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
+              <tr><td colspan="6" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
             } @else {
               @for (op of opRows(); track op['id']) {
                 <tr>
@@ -77,6 +78,13 @@ interface TableState extends ListParams {
                   <td style="text-align:center">
                     <input type="checkbox" [checked]="op['plenario_principal'] === true || op['plenario_principal'] === 1"
                       (change)="togglePlenario(op)" style="cursor:pointer; width:18px; height:18px">
+                  </td>
+                  <td style="text-align:center">
+                    <input type="checkbox"
+                      [checked]="op['plenario_principal_fixo'] === true || op['plenario_principal_fixo'] === 1"
+                      [disabled]="!(op['plenario_principal'] === true || op['plenario_principal'] === 1)"
+                      (change)="togglePlenarioFixo(op)"
+                      style="cursor:pointer; width:18px; height:18px">
                   </td>
                   <td style="text-align:center">
                     <input type="checkbox" [checked]="op['participa_escala'] === true || op['participa_escala'] === 1"
@@ -237,12 +245,43 @@ export class AdminDashboardComponent implements OnInit {
 
   // ── Toggle Plenário ──
   togglePlenario(op: Record<string,unknown>): void {
+    // Update otimista: alterna localmente antes da chamada para feedback imediato
+    // (sem isso, o [disabled] do "Fixo PP" só re-avaliaria após algum evento externo)
+    const novoApto = !(op['plenario_principal'] === true || op['plenario_principal'] === 1);
+    op['plenario_principal'] = novoApto ? 1 : 0;
+    if (!novoApto) op['plenario_principal_fixo'] = 0;
+    this.opRows.set([...this.opRows()]);
+
     this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-plenario`, {}).subscribe({
       next: (res: any) => {
-        if (res.ok) op['plenario_principal'] = res.plenario_principal ? 1 : 0;
+        if (res.ok) {
+          op['plenario_principal'] = res.plenario_principal ? 1 : 0;
+          if (!res.plenario_principal) op['plenario_principal_fixo'] = 0;
+          this.opRows.set([...this.opRows()]);
+        }
       },
       error: () => {
         alert('Erro ao alterar flag de plenário.');
+        this.loadOperadores();
+      },
+    });
+  }
+
+  togglePlenarioFixo(op: Record<string,unknown>): void {
+    const novoFixo = !(op['plenario_principal_fixo'] === true || op['plenario_principal_fixo'] === 1);
+    op['plenario_principal_fixo'] = novoFixo ? 1 : 0;
+    this.opRows.set([...this.opRows()]);
+
+    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-plenario-fixo`, {}).subscribe({
+      next: (res: any) => {
+        if (res.ok) {
+          op['plenario_principal_fixo'] = res.plenario_principal_fixo ? 1 : 0;
+          this.opRows.set([...this.opRows()]);
+        }
+      },
+      error: (err: any) => {
+        const msg = err?.error?.message || 'Erro ao alterar flag de fixo do Plenário Principal.';
+        alert(msg);
         this.loadOperadores();
       },
     });

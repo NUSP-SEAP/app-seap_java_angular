@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,6 +87,23 @@ public class ChecklistService {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.strip();
+    }
+
+    /**
+     * Permissão de edição de um checklist: apenas o criador ou operadores
+     * adicionais (junction FRM_CHECKLIST_OPERADOR). Fixos do Plenário
+     * Principal têm leitura via dashboard, mas não escrita.
+     */
+    private void validarPermissaoEdicao(long checklistId, String userId) {
+        Number ok = (Number) entityManager.createNativeQuery("""
+                SELECT CASE WHEN EXISTS (
+                    SELECT 1 FROM FRM_CHECKLIST WHERE ID = ?1 AND CRIADO_POR = ?2
+                    UNION ALL
+                    SELECT 1 FROM FRM_CHECKLIST_OPERADOR WHERE CHECKLIST_ID = ?1 AND OPERADOR_ID = ?2
+                ) THEN 1 ELSE 0 END FROM DUAL
+                """).setParameter(1, checklistId).setParameter(2, userId).getSingleResult();
+        if (ok.intValue() != 1)
+            throw new ServiceValidationException("Acesso negado.", HttpStatus.FORBIDDEN);
     }
 
     /** Resolve item_tipo_id (pelo id direto ou pelo nome). */
@@ -243,6 +261,9 @@ public class ChecklistService {
      */
     @Transactional
     public Map<String, Object> editar(long checklistId, Map<String, Object> body, String userId) {
+        if (userId == null || userId.isBlank()) throw new ServiceValidationException("Usuário não autenticado.");
+        validarPermissaoEdicao(checklistId, userId);
+
         // Campos obrigatórios
         if (str(body.get("data_operacao")).strip().isEmpty() || str(body.get("sala_id")).strip().isEmpty())
             throw new ServiceValidationException("Campos obrigatórios ausentes.");
