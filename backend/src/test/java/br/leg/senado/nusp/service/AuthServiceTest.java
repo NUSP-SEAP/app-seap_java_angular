@@ -40,7 +40,7 @@ class AuthServiceTest {
         when(entityManager.createNativeQuery(anyString())).thenReturn(mockQuery);
         when(mockQuery.setParameter(eq("usuario"), anyString())).thenReturn(mockQuery);
 
-        Object[] row = {"operador", "uuid-123", "João da Silva", "joao", "joao@senado.leg.br", "$2a$10$hash"};
+        Object[] row = {"operador", "uuid-123", "João da Silva", "joao", "joao@senado.leg.br", "$2a$10$hash", 0};
         List<Object[]> resultList = new java.util.ArrayList<>();
         resultList.add(row);
         when(mockQuery.getResultList()).thenReturn(resultList);
