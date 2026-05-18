@@ -7,6 +7,7 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
 import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../../shared/components/column-filter.component';
 import { getDistinct, buildFilters, buildReportParams, mesNome } from '../../core/helpers/table.helpers';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
+import { FmtDateTimePipe } from '../../shared/pipes/fmt-datetime.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 
 interface TableState extends ListParams { page:number; limit:number; sort:string; direction:string; search:string; }
@@ -14,7 +15,7 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
 @Component({
   selector: 'app-admin-operacoes',
   standalone: true,
-  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent, FmtDatePipe, FmtTimePipe],
+  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent, FmtDatePipe, FmtTimePipe, FmtDateTimePipe],
   template: `
     <h1>Operações de Áudio</h1>
     <a routerLink="/admin" class="back-link">&larr; Voltar ao Painel</a>
@@ -68,9 +69,14 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
                 <tr><td colspan="8" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhuma sessão.' }}</td></tr>
               } @else {
                 @for (s of opRows(); track s['id']) {
-                  <tr class="row-clickable" (click)="toggleSessao(s)">
+                  <tr class="row-clickable" [class.row-editado]="s['editado']" (click)="toggleSessao(s)">
                     <td><span class="btn-toggle">{{ s['_exp'] ? '▼' : '▶' }}</span></td>
-                    <td><strong>{{ s['sala_nome'] }}</strong></td>
+                    <td>
+                      <strong>{{ s['sala_nome'] }}</strong>
+                      @if (s['editado']) {
+                        <span class="badge-editado" [title]="'Contém entrada(s) editada(s) — última em ' + (s['ultima_edicao_em'] | fmtDateTime)"></span>
+                      }
+                    </td>
                     <td>{{ s['data'] | fmtDate }}</td>
                     <td [title]="formatEvento(s)">{{ truncate(formatEvento(s), 30) }}</td>
                     <td>{{ s['ultimo_pauta'] | fmtTime }}</td>
@@ -93,16 +99,26 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
                               <tbody>
                                 @if (asArr(e['operadores']).length > 0) {
                                   @for (op of asArr(e['operadores']); track $index) {
-                                    <tr class="row-clickable" (dblclick)="openEntrada(e)">
-                                      <td>{{ op }}</td>
+                                    <tr class="row-clickable" [class.row-editado]="$first && e['editado']" (dblclick)="openEntrada(e)">
+                                      <td>
+                                        {{ op }}
+                                        @if ($first && e['editado']) {
+                                          <span class="badge-editado" [title]="'Editado em ' + (e['ultima_edicao_em'] | fmtDateTime)"></span>
+                                        }
+                                      </td>
                                       @if ($first) {
                                         <td [attr.rowspan]="asArr(e['operadores']).length" [class]="e['anormalidade'] ? 'badge-falha' : 'badge-ok'" style="vertical-align:middle">{{ e['anormalidade'] ? 'SIM' : 'Não' }}</td>
                                       }
                                     </tr>
                                   }
                                 } @else {
-                                  <tr class="row-clickable" (dblclick)="openEntrada(e)">
-                                    <td>{{ e['preenchido_por'] }}</td>
+                                  <tr class="row-clickable" [class.row-editado]="e['editado']" (dblclick)="openEntrada(e)">
+                                    <td>
+                                      {{ e['preenchido_por'] }}
+                                      @if (e['editado']) {
+                                        <span class="badge-editado" [title]="'Editado em ' + (e['ultima_edicao_em'] | fmtDateTime)"></span>
+                                      }
+                                    </td>
                                     <td [class]="e['anormalidade'] ? 'badge-falha' : 'badge-ok'">{{ e['anormalidade'] ? 'SIM' : 'Não' }}</td>
                                   </tr>
                                 }
@@ -115,8 +131,13 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
                             <thead><tr><th>Nº</th><th>Operador</th><th>Início Operação</th><th>Fim Operação</th><th>Observações</th><th>Anom?</th></tr></thead>
                             <tbody>
                               @for (e of asArr(s['_entradas']); track e['id']||$index) {
-                                <tr class="row-clickable" (dblclick)="openEntrada(e)">
-                                  <td>{{ e['ordem'] }}º</td>
+                                <tr class="row-clickable" [class.row-editado]="e['editado']" (dblclick)="openEntrada(e)">
+                                  <td>
+                                    {{ e['ordem'] }}º
+                                    @if (e['editado']) {
+                                      <span class="badge-editado" [title]="'Editado em ' + (e['ultima_edicao_em'] | fmtDateTime)"></span>
+                                    }
+                                  </td>
                                   <td>{{ e['operador'] }}</td>
                                   <td>{{ e['hora_entrada'] | fmtTime }}</td>
                                   <td>{{ e['hora_saida'] | fmtTime }}</td>
@@ -152,8 +173,13 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
                 <tr><td colspan="9" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhuma entrada.' }}</td></tr>
               } @else {
                 @for (e of opRows(); track e['id']) {
-                  <tr class="row-clickable" (dblclick)="openEntrada(e)">
-                    <td><strong>{{ e['sala_nome'] }}</strong></td>
+                  <tr class="row-clickable" [class.row-editado]="e['editado']" (dblclick)="openEntrada(e)">
+                    <td>
+                      <strong>{{ e['sala_nome'] }}</strong>
+                      @if (e['editado']) {
+                        <span class="badge-editado" [title]="'Editado em ' + (e['ultima_edicao_em'] | fmtDateTime)"></span>
+                      }
+                    </td>
                     <td>{{ e['data'] | fmtDate }}</td>
                     <td>{{ e['operador_nome'] }}</td>
                     <td>{{ e['tipo_evento'] }}</td>

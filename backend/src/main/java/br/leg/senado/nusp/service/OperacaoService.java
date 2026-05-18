@@ -644,6 +644,18 @@ public class OperacaoService {
             snapshot.put("hora_entrada", str(sr[12]));
             snapshot.put("hora_saida", str(sr[13]));
         }
+        List<Suspensao> snapSuspensoes = suspensaoRepo.findByEntradaIdOrderByOrdemAsc(entradaId);
+        if (!snapSuspensoes.isEmpty()) {
+            List<Map<String, Object>> snapSuspList = new ArrayList<>();
+            for (Suspensao s : snapSuspensoes) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("hora_suspensao", s.getHoraSuspensao());
+                m.put("hora_reabertura", s.getHoraReabertura());
+                m.put("ordem", s.getOrdem());
+                snapSuspList.add(m);
+            }
+            snapshot.put("suspensoes", snapSuspList);
+        }
 
         // Se total > 1, manter horario_termino original
         if (totalEntradas > 1) {

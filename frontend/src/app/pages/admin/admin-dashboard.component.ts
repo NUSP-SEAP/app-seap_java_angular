@@ -7,6 +7,7 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
 import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../../shared/components/column-filter.component';
 import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
+import { FmtDateTimePipe } from '../../shared/pipes/fmt-datetime.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 import { hojeDdMm } from '../../core/helpers/date.helpers';
 
@@ -17,7 +18,7 @@ interface TableState extends ListParams {
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent, FmtDatePipe, FmtTimePipe],
+  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent, FmtDatePipe, FmtTimePipe, FmtDateTimePipe],
   template: `
     <h1>Painel Administrativo</h1>
 
@@ -147,9 +148,14 @@ interface TableState extends ListParams {
               <tr><td colspan="9" class="empty-state">{{ chkLoading() ? 'Carregando...' : 'Nenhum checklist encontrado.' }}</td></tr>
             } @else {
               @for (chk of chkRows(); track chk['id']) {
-                <tr>
+                <tr [class.row-editado]="chk['editado']">
                   <td><button class="btn-toggle" (click)="toggleAccordion(chk)">{{ chk['_expanded'] ? '▼' : '▶' }}</button></td>
-                  <td><strong>{{ chk['sala_nome'] || chk['sala'] }}</strong></td>
+                  <td>
+                    <strong>{{ chk['sala_nome'] || chk['sala'] }}</strong>
+                    @if (chk['editado']) {
+                      <span class="badge-editado" [title]="'Editado em ' + (chk['ultima_edicao_em'] | fmtDateTime)"></span>
+                    }
+                  </td>
                   <td>{{ chk['data'] | fmtDate }}</td>
                   <td>{{ chk['operador_nome'] }}</td>
                   <td>{{ chk['hora_inicio_testes'] | fmtTime }}</td>

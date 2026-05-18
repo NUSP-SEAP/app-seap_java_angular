@@ -134,6 +134,60 @@ input[type="date"], input[type="time"] {
 .badge-ok { color: var(--color-green); font-weight: 600; }
 .badge-falha { color: var(--color-red); font-weight: 600; }
 
+/* ═══ Marcador "editado" — usado nas listagens admin para sinalizar formulários editados ═══ */
+.badge-editado {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-left: 6px;
+  background: #fff7d6; color: #92400e; border: 1px solid #f5deb3;
+  border-radius: 50%; font-size: .7rem; line-height: 1;
+  cursor: help; vertical-align: middle;
+  &::before { content: "✎"; }
+}
+tr.row-editado > td:first-child {
+  box-shadow: inset 4px 0 0 #f59e0b;
+  background: #fffbeb;
+}
+tr.row-editado:hover > td:first-child { background: #fef3c7; }
+
+/* ═══ Tabs "Atual / Histórico" — usado nas páginas de detalhe admin ═══ */
+.detalhe-tabs {
+  display: flex; border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.detalhe-tab {
+  background: none; border: none; padding: 8px 16px;
+  font-size: .9rem; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  &.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  &:hover:not(.active) { color: var(--text); }
+  &:disabled { opacity: .5; cursor: not-allowed; }
+}
+.detalhe-tab-badge {
+  display: inline-block; background: #fef3c7; color: #92400e;
+  font-size: .7rem; font-weight: 700;
+  padding: 1px 7px; border-radius: 10px; margin-left: 6px;
+}
+
+/* Barra superior do modo histórico — banner + lista de versões */
+.historico-banner {
+  background: #fffbeb; border: 1px solid #fcd34d;
+  border-radius: 6px; padding: 10px 14px; font-size: .85rem;
+  color: #78350f; margin-bottom: 12px;
+}
+.versoes-list {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px;
+}
+.versao-chip {
+  background: #fff; border: 1px solid var(--border); border-radius: 16px;
+  padding: 4px 12px; font-size: .8rem; cursor: pointer;
+  color: var(--text); white-space: nowrap;
+  &:hover { background: var(--row-hover); }
+  &.active {
+    background: #f59e0b; color: #fff; border-color: #f59e0b;
+    font-weight: 600;
+  }
+}
+
 /* ═══ Main content container ═══ */
 .main-content {
   max-width: 980px;

@@ -3,13 +3,14 @@ package br.leg.senado.nusp.service;
 import br.leg.senado.nusp.entity.RegistroAnormalidadeAdmin;
 import br.leg.senado.nusp.exception.ServiceValidationException;
 import br.leg.senado.nusp.service.DashboardQueryHelper.PagedResult;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.*;
 
 /**
@@ -22,6 +23,7 @@ import java.util.*;
 public class AdminDashboardService {
 
     private final EntityManager em;
+    private final ObjectMapper objectMapper;
 
     // ══ Operadores ════════════════════════════════════════════
 
@@ -50,6 +52,7 @@ public class AdminDashboardService {
         return DashboardQueryHelper.executePagedQuery(em,
                 "c.ID, c.DATA_OPERACAO AS data, s.NOME AS sala_nome, c.TURNO, " +
                 "o.NOME_COMPLETO AS operador_nome, c.HORA_INICIO_TESTES, c.HORA_TERMINO_TESTES, c.EDITADO, " +
+                "(SELECT MAX(h.EDITADO_EM) FROM FRM_CHECKLIST_HISTORICO h WHERE h.CHECKLIST_ID = c.ID) AS ultima_edicao_em, " +
                 "CASE WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha') THEN 'Falha' " +
                 "WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID) THEN 'Ok' ELSE '--' END AS status",
                 "FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID LEFT JOIN PES_OPERADOR o ON o.ID = c.CRIADO_POR",
@@ -143,7 +146,11 @@ public class AdminDashboardService {
                 "c.NOME AS comissao_nome, " +
                 "ult.HORARIO_PAUTA AS ultimo_pauta, " +
                 "ult.HORARIO_INICIO AS ultimo_inicio, " +
-                "ult.HORARIO_TERMINO AS ultimo_termino",
+                "ult.HORARIO_TERMINO AS ultimo_termino, " +
+                "(SELECT MAX(eh.EDITADO) FROM OPR_REGISTRO_ENTRADA eh WHERE eh.REGISTRO_ID = r.ID) AS editado, " +
+                "(SELECT MAX(h.EDITADO_EM) FROM OPR_REGISTRO_ENTRADA_HIST h " +
+                " JOIN OPR_REGISTRO_ENTRADA eh ON eh.ID = h.ENTRADA_ID " +
+                " WHERE eh.REGISTRO_ID = r.ID) AS ultima_edicao_em",
                 "FROM OPR_REGISTRO_AUDIO r JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
                 "JOIN (SELECT REGISTRO_ID, NOME_EVENTO, HORARIO_PAUTA, HORARIO_INICIO, HORARIO_TERMINO, COMISSAO_ID, " +
                 "ROW_NUMBER() OVER (PARTITION BY REGISTRO_ID ORDER BY ORDEM DESC, SEQ DESC, ID DESC) AS RN " +
@@ -169,7 +176,8 @@ public class AdminDashboardService {
                 "r.NOME_DEMAIS_SALAS AS nome_demais_salas, " +
                 "o.NOME_COMPLETO AS operador_nome, " +
                 "e.TIPO_EVENTO, e.NOME_EVENTO, e.HORARIO_PAUTA, e.HORARIO_INICIO, e.HORARIO_TERMINO, " +
-                "e.HOUVE_ANORMALIDADE, e.EDITADO",
+                "e.HOUVE_ANORMALIDADE, e.EDITADO, " +
+                "(SELECT MAX(h.EDITADO_EM) FROM OPR_REGISTRO_ENTRADA_HIST h WHERE h.ENTRADA_ID = e.ID) AS ultima_edicao_em",
                 "FROM OPR_REGISTRO_ENTRADA e " +
                 "JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID " +
                 "JOIN CAD_SALA s ON s.ID = r.SALA_ID " +
@@ -266,7 +274,9 @@ public class AdminDashboardService {
         List<Object[]> rows = em.createNativeQuery("""
                 SELECT e.ID, e.ORDEM, o.NOME_COMPLETO, e.TIPO_EVENTO,
                        e.NOME_EVENTO, e.HORARIO_PAUTA, e.HORARIO_INICIO, e.HORARIO_TERMINO,
-                       e.HOUVE_ANORMALIDADE, e.HORA_ENTRADA, e.HORA_SAIDA, e.OBSERVACOES
+                       e.HOUVE_ANORMALIDADE, e.HORA_ENTRADA, e.HORA_SAIDA, e.OBSERVACOES,
+                       e.EDITADO,
+                       (SELECT MAX(h.EDITADO_EM) FROM OPR_REGISTRO_ENTRADA_HIST h WHERE h.ENTRADA_ID = e.ID) AS ULTIMA_EDICAO_EM
                 FROM OPR_REGISTRO_ENTRADA e
                 JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID
                 WHERE e.REGISTRO_ID = ?1
@@ -296,6 +306,8 @@ public class AdminDashboardService {
                 m.put("evento", str(r[4]) != null ? str(r[4]) : "");
                 m.put("anormalidade", boolVal(r[8]));
                 m.put("operadores", operadores);
+                m.put("editado", boolVal(r[12]));
+                m.put("ultima_edicao_em", str(r[13]));
                 entradas.add(m);
             }
         } else {
@@ -309,6 +321,8 @@ public class AdminDashboardService {
                 m.put("hora_saida", str(r[10]) != null ? str(r[10]) : "");
                 m.put("observacoes", str(r[11]) != null ? str(r[11]) : "");
                 m.put("anormalidade", boolVal(r[8]));
+                m.put("editado", boolVal(r[12]));
+                m.put("ultima_edicao_em", str(r[13]));
                 entradas.add(m);
             }
         }
@@ -562,8 +576,305 @@ public class AdminDashboardService {
         return result;
     }
 
+    // ══ Histórico de Checklists ═══════════════════════════════
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listChecklistHistorico(long checklistId) {
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT h.ID, h.EDITADO_POR, h.EDITADO_EM,
+                       COALESCE(a.NOME_COMPLETO, o.NOME_COMPLETO) AS EDITADO_POR_NOME
+                FROM FRM_CHECKLIST_HISTORICO h
+                LEFT JOIN PES_OPERADOR o ON o.ID = h.EDITADO_POR
+                LEFT JOIN PES_ADMINISTRADOR a ON a.ID = h.EDITADO_POR
+                WHERE h.CHECKLIST_ID = ?1
+                ORDER BY h.EDITADO_EM ASC, h.ID ASC
+                """).setParameter(1, checklistId).getResultList();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        int n = 1;
+        for (Object[] r : rows) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("historico_id", num(r[0]));
+            m.put("numero_versao", n++);
+            m.put("editado_por", str(r[1]));
+            m.put("editado_em", str(r[2]));
+            m.put("editado_por_nome", str(r[3]));
+            result.add(m);
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getChecklistVersao(long historicoId) {
+        List<Object[]> histRows = em.createNativeQuery("""
+                SELECT CHECKLIST_ID, SNAPSHOT, EDITADO_POR, EDITADO_EM
+                FROM FRM_CHECKLIST_HISTORICO WHERE ID = ?1
+                """).setParameter(1, historicoId).getResultList();
+        if (histRows.isEmpty()) return null;
+        Object[] hist = histRows.get(0);
+        long checklistId = num(hist[0]);
+        String snapJson = str(hist[1]);
+        String editadoPor = str(hist[2]);
+        String editadoEm = str(hist[3]);
+
+        Map<String, Object> snap = parseSnapshot(snapJson);
+        Map<String, Object> header = (Map<String, Object>) snap.getOrDefault("header", Map.of());
+
+        // Dados imutáveis do checklist (criado_por, operador_nome)
+        List<Object[]> baseRows = em.createNativeQuery("""
+                SELECT o.NOME_COMPLETO, c.CRIADO_POR
+                FROM FRM_CHECKLIST c
+                LEFT JOIN PES_OPERADOR o ON o.ID = c.CRIADO_POR
+                WHERE c.ID = ?1
+                """).setParameter(1, checklistId).getResultList();
+        String operadorNome = !baseRows.isEmpty() ? str(baseRows.get(0)[0]) : null;
+        String criadoPor    = !baseRows.isEmpty() ? str(baseRows.get(0)[1]) : null;
+
+        // Resolver sala_nome a partir do sala_id do snapshot
+        Long salaId = toLong(header.get("sala_id"));
+        String salaNome = resolverNomeSala(salaId);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", checklistId);
+        result.put("data_operacao", header.get("data_operacao"));
+        result.put("sala_id", salaId);
+        result.put("sala_nome", salaNome);
+        result.put("turno", header.get("turno"));
+        result.put("hora_inicio_testes", header.get("hora_inicio_testes"));
+        result.put("hora_termino_testes", header.get("hora_termino_testes"));
+        result.put("observacoes", header.get("observacoes"));
+        result.put("usb_01", header.get("usb_01"));
+        result.put("usb_02", header.get("usb_02"));
+        result.put("editado", true);
+        result.put("operador_nome", operadorNome);
+        result.put("criado_por", criadoPor);
+
+        // Itens (resolver item_nome e tipo_widget em lote)
+        List<Map<String, Object>> snapItens = (List<Map<String, Object>>) snap.getOrDefault("itens", List.of());
+        List<Map<String, Object>> itensList = new ArrayList<>();
+        if (!snapItens.isEmpty()) {
+            Set<Long> tipoIds = new HashSet<>();
+            for (Map<String, Object> si : snapItens) {
+                Long id = toLong(si.get("item_tipo_id"));
+                if (id != null) tipoIds.add(id);
+            }
+            Map<Long, Object[]> tipoInfo = new HashMap<>();
+            if (!tipoIds.isEmpty()) {
+                String placeholders = String.join(",", Collections.nCopies(tipoIds.size(), "?"));
+                Query tipoQ = em.createNativeQuery(
+                        "SELECT ID, NOME, TIPO_WIDGET FROM FRM_CHECKLIST_ITEM_TIPO WHERE ID IN (" + placeholders + ")");
+                int i = 1;
+                for (Long tid : tipoIds) tipoQ.setParameter(i++, tid);
+                List<Object[]> tipoRows = tipoQ.getResultList();
+                for (Object[] tr : tipoRows) tipoInfo.put(((Number) tr[0]).longValue(), tr);
+            }
+            for (Map<String, Object> si : snapItens) {
+                Long tipoId = toLong(si.get("item_tipo_id"));
+                Object[] ti = tipoId != null ? tipoInfo.get(tipoId) : null;
+                String tipoWidget = ti != null && ti[2] != null ? str(ti[2]) : "radio";
+                String itemNome = ti != null ? str(ti[1]) : null;
+
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", si.get("resposta_id"));
+                m.put("item_tipo_id", tipoId);
+                m.put("item_nome", itemNome);
+                m.put("status", si.get("status"));
+                m.put("descricao_falha", si.get("descricao_falha") != null ? si.get("descricao_falha") : "");
+                m.put("valor_texto", si.get("valor_texto") != null ? si.get("valor_texto") : "");
+                m.put("editado", false);
+                m.put("tipo_widget", tipoWidget);
+                itensList.add(m);
+            }
+        }
+        result.put("itens", itensList);
+
+        // Operadores (Plenário Principal): snapshot tem IDs, detalhe mostra nomes
+        List<String> cabineIds = (List<String>) snap.get("operadores_cabine");
+        List<String> plenarioIds = (List<String>) snap.get("operadores_plenario");
+        if (cabineIds != null || plenarioIds != null) {
+            Set<String> allIds = new HashSet<>();
+            if (cabineIds != null) allIds.addAll(cabineIds);
+            if (plenarioIds != null) allIds.addAll(plenarioIds);
+            Map<String, String> nomes = resolverNomesOperadores(allIds);
+            if (cabineIds != null) {
+                result.put("operadores_cabine",
+                        cabineIds.stream().map(id -> nomes.getOrDefault(id, "?")).toList());
+            }
+            if (plenarioIds != null) {
+                result.put("operadores_plenario",
+                        plenarioIds.stream().map(id -> nomes.getOrDefault(id, "?")).toList());
+            }
+        }
+
+        result.put("versao", versaoMeta(historicoId, editadoPor, editadoEm));
+        return result;
+    }
+
+    // ══ Histórico de Entradas (ROA) ═══════════════════════════
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listEntradaHistorico(long entradaId) {
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT h.ID, h.EDITADO_POR, h.EDITADO_EM,
+                       COALESCE(a.NOME_COMPLETO, o.NOME_COMPLETO) AS EDITADO_POR_NOME
+                FROM OPR_REGISTRO_ENTRADA_HIST h
+                LEFT JOIN PES_OPERADOR o ON o.ID = h.EDITADO_POR
+                LEFT JOIN PES_ADMINISTRADOR a ON a.ID = h.EDITADO_POR
+                WHERE h.ENTRADA_ID = ?1
+                ORDER BY h.EDITADO_EM ASC, h.ID ASC
+                """).setParameter(1, entradaId).getResultList();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        int n = 1;
+        for (Object[] r : rows) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("historico_id", num(r[0]));
+            m.put("numero_versao", n++);
+            m.put("editado_por", str(r[1]));
+            m.put("editado_em", str(r[2]));
+            m.put("editado_por_nome", str(r[3]));
+            result.add(m);
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getEntradaVersao(long historicoId) {
+        List<Object[]> histRows = em.createNativeQuery("""
+                SELECT ENTRADA_ID, SNAPSHOT, EDITADO_POR, EDITADO_EM
+                FROM OPR_REGISTRO_ENTRADA_HIST WHERE ID = ?1
+                """).setParameter(1, historicoId).getResultList();
+        if (histRows.isEmpty()) return null;
+        Object[] hist = histRows.get(0);
+        long entradaId = num(hist[0]);
+        String snapJson = str(hist[1]);
+        String editadoPor = str(hist[2]);
+        String editadoEm = str(hist[3]);
+
+        Map<String, Object> snap = parseSnapshot(snapJson);
+
+        // Dados imutáveis ou auxiliares (registro, data, operador, ordem, seq, multi_operador)
+        List<Object[]> baseRows = em.createNativeQuery("""
+                SELECT e.REGISTRO_ID, r.DATA, o.NOME_COMPLETO, e.ORDEM, e.SEQ,
+                       r.NOME_DEMAIS_SALAS, s.MULTI_OPERADOR
+                FROM OPR_REGISTRO_ENTRADA e
+                JOIN OPR_REGISTRO_AUDIO r ON r.ID = e.REGISTRO_ID
+                JOIN PES_OPERADOR o ON o.ID = e.OPERADOR_ID
+                JOIN CAD_SALA s ON s.ID = r.SALA_ID
+                WHERE e.ID = ?1
+                """).setParameter(1, entradaId).getResultList();
+        if (baseRows.isEmpty()) return null;
+        Object[] base = baseRows.get(0);
+
+        Long salaId = toLong(snap.get("sala_id"));
+        String salaNome = resolverNomeSala(salaId);
+        Long comissaoId = toLong(snap.get("comissao_id"));
+        String comissaoNome = resolverNomeComissao(comissaoId);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", entradaId);
+        result.put("registro_id", num(base[0]));
+        result.put("data", str(base[1]));
+        result.put("sala_nome", salaNome);
+        result.put("operador_nome", str(base[2]));
+        result.put("ordem", num(base[3]));
+        result.put("seq", num(base[4]));
+        result.put("nome_evento", snap.get("nome_evento"));
+        result.put("horario_pauta", snap.get("horario_pauta"));
+        result.put("horario_inicio", snap.get("horario_inicio"));
+        result.put("horario_termino", snap.get("horario_termino"));
+        result.put("tipo_evento", snap.get("tipo_evento"));
+        result.put("usb_01", snap.get("usb_01"));
+        result.put("usb_02", snap.get("usb_02"));
+        result.put("observacoes", snap.get("observacoes"));
+        result.put("comissao_id", comissaoId);
+        result.put("responsavel_evento", snap.get("responsavel_evento"));
+        result.put("hora_entrada", snap.get("hora_entrada"));
+        result.put("hora_saida", snap.get("hora_saida"));
+        result.put("houve_anormalidade", Boolean.TRUE.equals(snap.get("houve_anormalidade")));
+        result.put("editado", true);
+        result.put("sala_id", salaId);
+        result.put("comissao_nome", comissaoNome);
+        result.put("nome_demais_salas", str(base[5]));
+        result.put("multi_operador", boolVal(base[6]));
+
+        Object suspensoesSnap = snap.get("suspensoes");
+        if (suspensoesSnap instanceof List<?> suspList && !suspList.isEmpty()) {
+            result.put("suspensoes", suspList);
+        }
+
+        result.put("versao", versaoMeta(historicoId, editadoPor, editadoEm));
+        return result;
+    }
+
     // ── Helpers ──
     private static String str(Object o) { return NativeQueryUtils.str(o); }
     private static Long num(Object o) { return NativeQueryUtils.num(o); }
     private static boolean boolVal(Object o) { return NativeQueryUtils.boolVal(o); }
+
+    private static Long toLong(Object o) {
+        if (o == null) return null;
+        if (o instanceof Number n) return n.longValue();
+        try { return Long.parseLong(o.toString()); } catch (Exception e) { return null; }
+    }
+
+    private Map<String, Object> parseSnapshot(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new ServiceValidationException("Snapshot do histórico inválido.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolverNomeSala(Long salaId) {
+        if (salaId == null) return null;
+        List<Object> rows = em.createNativeQuery("SELECT NOME FROM CAD_SALA WHERE ID = ?1")
+                .setParameter(1, salaId).getResultList();
+        return rows.isEmpty() ? null : str(rows.get(0));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolverNomeComissao(Long comissaoId) {
+        if (comissaoId == null) return null;
+        List<Object> rows = em.createNativeQuery("SELECT NOME FROM CAD_COMISSAO WHERE ID = ?1")
+                .setParameter(1, comissaoId).getResultList();
+        return rows.isEmpty() ? null : str(rows.get(0));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolverNomeUsuario(String userId) {
+        if (userId == null || userId.isBlank()) return null;
+        List<Object> rows = em.createNativeQuery("""
+                SELECT COALESCE(
+                    (SELECT NOME_COMPLETO FROM PES_ADMINISTRADOR WHERE ID = ?1),
+                    (SELECT NOME_COMPLETO FROM PES_OPERADOR WHERE ID = ?1)
+                ) FROM dual
+                """).setParameter(1, userId).getResultList();
+        return rows.isEmpty() ? null : str(rows.get(0));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, String> resolverNomesOperadores(Set<String> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        Query q = em.createNativeQuery(
+                "SELECT ID, NOME_COMPLETO FROM PES_OPERADOR WHERE ID IN (" + placeholders + ")");
+        int i = 1;
+        for (String id : ids) q.setParameter(i++, id);
+        List<Object[]> rows = q.getResultList();
+        Map<String, String> result = new HashMap<>();
+        for (Object[] r : rows) result.put(str(r[0]), str(r[1]));
+        return result;
+    }
+
+    private Map<String, Object> versaoMeta(long historicoId, String editadoPor, String editadoEm) {
+        Map<String, Object> v = new LinkedHashMap<>();
+        v.put("historico_id", historicoId);
+        v.put("editado_por", editadoPor);
+        v.put("editado_em", editadoEm);
+        v.put("editado_por_nome", resolverNomeUsuario(editadoPor));
+        return v;
+    }
 }

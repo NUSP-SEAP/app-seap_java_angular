@@ -1,18 +1,27 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
+import { FmtDateTimePipe } from '../../shared/pipes/fmt-datetime.pipe';
+
+type VersaoMeta = {
+  historico_id: number;
+  numero_versao: number;
+  editado_por: string | null;
+  editado_por_nome: string | null;
+  editado_em: string | null;
+};
 
 @Component({
   selector: 'app-checklist-detalhe',
   standalone: true,
-  imports: [FmtDatePipe, FmtTimePipe],
+  imports: [FmtDatePipe, FmtTimePipe, FmtDateTimePipe],
   template: `
     <div class="card-custom detalhe-card">
       @if (loading()) {
         <p class="text-muted-sm">Carregando...</p>
-      } @else if (!data()) {
+      } @else if (!dataAtual()) {
         <p class="text-muted-sm">Checklist não encontrado.</p>
       } @else {
         <div class="detalhe-header">
@@ -20,85 +29,119 @@ import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
           <span class="badge-readonly">APENAS LEITURA</span>
         </div>
 
-        <!-- 1) Identificação -->
-        <h3>1) Identificação</h3>
-        <div class="field-row two-cols">
-          <div class="field">
-            <label>Data</label>
-            <div class="field-value">{{ data()!['data_operacao'] | fmtDate }}</div>
-          </div>
-          <div class="field">
-            <label>Local</label>
-            <div class="field-value">{{ data()!['sala_nome'] }}</div>
-          </div>
-        </div>
-        <div class="field-row three-cols">
-          <div class="field">
-            <label>Início</label>
-            <div class="field-value">{{ data()!['hora_inicio_testes'] | fmtTime }}</div>
-          </div>
-          <div class="field">
-            <label>Término</label>
-            <div class="field-value">{{ data()!['hora_termino_testes'] | fmtTime }}</div>
-          </div>
-          <div class="field">
-            <label>Duração</label>
-            <div class="field-value">{{ calcDuracao() }}</div>
-          </div>
+        <!-- Tabs Atual / Histórico -->
+        <div class="detalhe-tabs">
+          <button class="detalhe-tab" [class.active]="viewMode()==='atual'" (click)="selecionarAtual()">Atual</button>
+          <button class="detalhe-tab" [class.active]="viewMode()==='historico'" [disabled]="!dataAtual()?.['editado']" (click)="selecionarHistorico()">
+            Histórico
+            @if (totalVersoes() > 0) { <span class="detalhe-tab-badge">{{ totalVersoes() }}</span> }
+          </button>
         </div>
 
-        <!-- 2) Itens Verificados -->
-        <h3>2) Itens Verificados</h3>
-        @for (it of itens(); track it['id']) {
-          <div class="item-row" [class.item-falha]="it['status'] === 'Falha'">
-            <span class="item-nome">{{ it['item_nome'] }}</span>
-            @if (it['tipo_widget'] !== 'text') {
-              <span class="item-status" [class]="it['status'] === 'Falha' ? 'status-falha' : 'status-ok'">
-                {{ it['status'] === 'Falha' ? '\u2716 Falha' : '\u2705 Ok' }}
-              </span>
+        @if (viewMode()==='historico') {
+          @if (loadingVersoes()) {
+            <p class="text-muted-sm">Carregando histórico...</p>
+          } @else if (versoes().length === 0) {
+            <p class="text-muted-sm">Nenhuma versão anterior encontrada.</p>
+          } @else {
+            @if (versaoExibida(); as v) {
+              <div class="historico-banner">
+                <strong>Versão {{ v.numero_versao }}</strong> —
+                Salva em {{ v.editado_em | fmtDateTime }}
+                @if (v.editado_por_nome) { por <strong>{{ v.editado_por_nome }}</strong> }
+              </div>
             }
-          </div>
-          @if (it['status'] === 'Falha' && it['descricao_falha']) {
-            <div class="item-desc falha-desc">
-              <strong>Descrição da falha:</strong> {{ it['descricao_falha'] }}
-            </div>
-          }
-          @if (it['valor_texto']) {
-            <div class="item-desc texto-desc">
-              {{ it['valor_texto'] }}
+            <div class="versoes-list">
+              @for (v of versoes(); track v.historico_id) {
+                <button class="versao-chip" [class.active]="versaoExibida()?.historico_id === v.historico_id" (click)="selecionarVersao(v)">
+                  v{{ v.numero_versao }} · {{ v.editado_em | fmtDateTime }}
+                </button>
+              }
             </div>
           }
         }
 
-        <!-- 3) Observações -->
-        <h3>3) Observações</h3>
-        <div class="field">
-          <label>Anotações gerais</label>
-          <div class="field-value obs-value">{{ data()!['observacoes'] || '' }}</div>
-        </div>
+        @if (dataDisplay(); as dd) {
+          <!-- 1) Identificação -->
+          <h3>1) Identificação</h3>
+          <div class="field-row two-cols">
+            <div class="field">
+              <label>Data</label>
+              <div class="field-value">{{ dd['data_operacao'] | fmtDate }}</div>
+            </div>
+            <div class="field">
+              <label>Local</label>
+              <div class="field-value">{{ dd['sala_nome'] }}</div>
+            </div>
+          </div>
+          <div class="field-row three-cols">
+            <div class="field">
+              <label>Início</label>
+              <div class="field-value">{{ dd['hora_inicio_testes'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Término</label>
+              <div class="field-value">{{ dd['hora_termino_testes'] | fmtTime }}</div>
+            </div>
+            <div class="field">
+              <label>Duração</label>
+              <div class="field-value">{{ calcDuracao() }}</div>
+            </div>
+          </div>
 
-        <!-- 4) Responsável -->
-        <h3>4) Responsável</h3>
-        @if (data()!['operadores_cabine'] || data()!['operadores_plenario']) {
-          <div class="field-grid two-cols">
-            <div class="field">
-              <label>Cabine</label>
-              <div class="field-value">{{ asStringArray(data()!['operadores_cabine']).join(', ') || '-' }}</div>
+          <!-- 2) Itens Verificados -->
+          <h3>2) Itens Verificados</h3>
+          @for (it of itensDisplay(); track it['id']) {
+            <div class="item-row" [class.item-falha]="it['status'] === 'Falha'">
+              <span class="item-nome">{{ it['item_nome'] }}</span>
+              @if (it['tipo_widget'] !== 'text') {
+                <span class="item-status" [class]="it['status'] === 'Falha' ? 'status-falha' : 'status-ok'">
+                  {{ it['status'] === 'Falha' ? '✖ Falha' : '✅ Ok' }}
+                </span>
+              }
+            </div>
+            @if (it['status'] === 'Falha' && it['descricao_falha']) {
+              <div class="item-desc falha-desc">
+                <strong>Descrição da falha:</strong> {{ it['descricao_falha'] }}
+              </div>
+            }
+            @if (it['valor_texto']) {
+              <div class="item-desc texto-desc">
+                {{ it['valor_texto'] }}
+              </div>
+            }
+          }
+
+          <!-- 3) Observações -->
+          <h3>3) Observações</h3>
+          <div class="field">
+            <label>Anotações gerais</label>
+            <div class="field-value obs-value">{{ dd['observacoes'] || '' }}</div>
+          </div>
+
+          <!-- 4) Responsável -->
+          <h3>4) Responsável</h3>
+          @if (dd['operadores_cabine'] || dd['operadores_plenario']) {
+            <div class="field-grid two-cols">
+              <div class="field">
+                <label>Cabine</label>
+                <div class="field-value">{{ asStringArray(dd['operadores_cabine']).join(', ') || '-' }}</div>
+              </div>
+              <div class="field">
+                <label>Plenário</label>
+                <div class="field-value">{{ asStringArray(dd['operadores_plenario']).join(', ') || '-' }}</div>
+              </div>
             </div>
             <div class="field">
-              <label>Plenário</label>
-              <div class="field-value">{{ asStringArray(data()!['operadores_plenario']).join(', ') || '-' }}</div>
+              <label>Preenchido por</label>
+              <div class="field-value">{{ dd['operador_nome'] }}</div>
             </div>
-          </div>
-          <div class="field">
-            <label>Preenchido por</label>
-            <div class="field-value">{{ data()!['operador_nome'] }}</div>
-          </div>
-        } @else {
-          <div class="field">
-            <label>Verificado por</label>
-            <div class="field-value">{{ data()!['operador_nome'] }}</div>
-          </div>
+          } @else {
+            <div class="field">
+              <label>Verificado por</label>
+              <div class="field-value">{{ dd['operador_nome'] }}</div>
+            </div>
+          }
         }
 
         <!-- Ações -->
@@ -137,8 +180,24 @@ export class ChecklistDetalheComponent implements OnInit {
   private api = inject(ApiService);
 
   loading = signal(true);
-  data = signal<Record<string, any> | null>(null);
-  itens = signal<Record<string, any>[]>([]);
+  dataAtual = signal<Record<string, any> | null>(null);
+  itensAtual = signal<Record<string, any>[]>([]);
+
+  viewMode = signal<'atual' | 'historico'>('atual');
+  versoes = signal<VersaoMeta[]>([]);
+  loadingVersoes = signal(false);
+  versaoExibida = signal<VersaoMeta | null>(null);
+  dataVersao = signal<Record<string, any> | null>(null);
+  itensVersao = signal<Record<string, any>[]>([]);
+
+  totalVersoes = computed(() => this.versoes().length);
+
+  dataDisplay = computed<Record<string, any> | null>(() =>
+    this.viewMode() === 'historico' ? this.dataVersao() : this.dataAtual()
+  );
+  itensDisplay = computed<Record<string, any>[]>(() =>
+    this.viewMode() === 'historico' ? this.itensVersao() : this.itensAtual()
+  );
 
   ngOnInit(): void {
     const id = this.route.snapshot.queryParamMap.get('checklist_id');
@@ -147,16 +206,54 @@ export class ChecklistDetalheComponent implements OnInit {
     this.api.get<any>('/api/admin/checklist/detalhe', { checklist_id: +id }).subscribe({
       next: (res: any) => {
         const d = res?.data ?? res;
-        this.data.set(d);
-        this.itens.set(d?.itens ?? []);
+        this.dataAtual.set(d);
+        this.itensAtual.set(d?.itens ?? []);
         this.loading.set(false);
       },
       error: () => { this.loading.set(false); },
     });
   }
 
+  selecionarAtual(): void {
+    this.viewMode.set('atual');
+  }
+
+  selecionarHistorico(): void {
+    this.viewMode.set('historico');
+    if (this.versoes().length === 0) this.carregarVersoes();
+  }
+
+  private carregarVersoes(): void {
+    const id = this.dataAtual()?.['id'];
+    if (!id) return;
+    this.loadingVersoes.set(true);
+    this.api.get<any>('/api/admin/checklist/historico', { checklist_id: +id }).subscribe({
+      next: (res: any) => {
+        const lista = (res?.data ?? []) as VersaoMeta[];
+        // mais recente primeiro
+        const ordenadas = [...lista].reverse();
+        this.versoes.set(ordenadas);
+        this.loadingVersoes.set(false);
+        if (ordenadas.length > 0) this.selecionarVersao(ordenadas[0]);
+      },
+      error: () => { this.loadingVersoes.set(false); },
+    });
+  }
+
+  selecionarVersao(v: VersaoMeta): void {
+    this.versaoExibida.set(v);
+    this.api.get<any>('/api/admin/checklist/historico/versao', { historico_id: v.historico_id }).subscribe({
+      next: (res: any) => {
+        const d = res?.data ?? res;
+        this.dataVersao.set(d);
+        this.itensVersao.set(d?.itens ?? []);
+      },
+      error: () => { this.dataVersao.set(null); this.itensVersao.set([]); },
+    });
+  }
+
   calcDuracao(): string {
-    const d = this.data();
+    const d = this.dataDisplay();
     if (!d) return '-';
     const inicio = String(d['hora_inicio_testes'] || '');
     const termino = String(d['hora_termino_testes'] || '');

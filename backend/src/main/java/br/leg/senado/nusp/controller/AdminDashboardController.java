@@ -156,6 +156,34 @@ public class AdminDashboardController {
         return ResponseEntity.ok(Map.of("ok", true, "data", data));
     }
 
+    // ══ Histórico de edições ══════════════════════════════════
+
+    @GetMapping("/checklist/historico")
+    public ResponseEntity<?> checklistHistorico(@RequestParam("checklist_id") long checklistId) {
+        List<Map<String, Object>> versoes = dashboardService.listChecklistHistorico(checklistId);
+        return ResponseEntity.ok(Map.of("ok", true, "data", versoes));
+    }
+
+    @GetMapping("/checklist/historico/versao")
+    public ResponseEntity<?> checklistHistoricoVersao(@RequestParam("historico_id") long historicoId) {
+        Map<String, Object> data = dashboardService.getChecklistVersao(historicoId);
+        if (data == null) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "not_found"));
+        return ResponseEntity.ok(Map.of("ok", true, "data", data));
+    }
+
+    @GetMapping("/operacao/historico")
+    public ResponseEntity<?> operacaoHistorico(@RequestParam("entrada_id") long entradaId) {
+        List<Map<String, Object>> versoes = dashboardService.listEntradaHistorico(entradaId);
+        return ResponseEntity.ok(Map.of("ok", true, "data", versoes));
+    }
+
+    @GetMapping("/operacao/historico/versao")
+    public ResponseEntity<?> operacaoHistoricoVersao(@RequestParam("historico_id") long historicoId) {
+        Map<String, Object> data = dashboardService.getEntradaVersao(historicoId);
+        if (data == null) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "not_found"));
+        return ResponseEntity.ok(Map.of("ok", true, "data", data));
+    }
+
     // ══ Anormalidades ═════════════════════════════════════════
 
     @GetMapping("/dashboard/anormalidades/salas")
