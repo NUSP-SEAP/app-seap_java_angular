@@ -28,13 +28,15 @@ export const routes: Routes = [
       // ── Admin ──
       { path: 'admin', canActivate: [roleGuard], data: { roles: ['administrador'] }, children: [
         { path: '', title: 'Admin | Senado NUSP', loadComponent: () => import('./pages/admin/admin-dashboard.component').then(m => m.AdminDashboardComponent) },
-        { path: 'operacoes', title: 'Operações de Áudio | Admin', loadComponent: () => import('./pages/admin/admin-operacoes.component').then(m => m.AdminOperacoesComponent) },
+        { path: 'operacao-audio', title: 'Operação de Áudio | Admin', loadComponent: () => import('./pages/admin/admin-operacao-audio.component').then(m => m.AdminOperacaoAudioComponent) },
+        { path: 'area-tecnica', title: 'Área Técnica | Admin', loadComponent: () => import('./pages/admin/admin-area-tecnica.component').then(m => m.AdminAreaTecnicaComponent) },
         { path: 'novo-operador', title: 'Novo Operador — Administração', loadComponent: () => import('./pages/admin/admin-novo-operador.component').then(m => m.AdminNovoOperadorComponent) },
         { path: 'novo-tecnico', title: 'Novo Técnico — Administração', loadComponent: () => import('./pages/admin/admin-novo-tecnico.component').then(m => m.AdminNovoTecnicoComponent) },
         { path: 'novo-admin', canActivate: [masterGuard], title: 'Novo Administrador — Administração', loadComponent: () => import('./pages/admin/admin-novo-admin.component').then(m => m.AdminNovoAdminComponent) },
         { path: 'escala', title: 'Escala Semanal | Admin', loadComponent: () => import('./pages/admin/admin-escala.component').then(m => m.AdminEscalaComponent) },
         { path: 'agenda', title: 'Agenda Legislativa | Admin', loadComponent: () => import('./pages/admin/admin-agenda.component').then(m => m.AdminAgendaComponent) },
         { path: 'form-edit', title: 'Edição de Formulários | Admin', loadComponent: () => import('./pages/admin/admin-form-edit.component').then(m => m.AdminFormEditComponent) },
+        { path: 'avisos-sala', title: 'Inserir Avisos | Admin', loadComponent: () => import('./pages/admin/admin-avisos-sala.component').then(m => m.AdminAvisosSalaComponent) },
         { path: 'checklist/detalhe', title: 'Detalhe do Checklist | Admin', loadComponent: () => import('./pages/admin/checklist-detalhe.component').then(m => m.ChecklistDetalheComponent) },
         { path: 'operacao/detalhe', title: 'Detalhe da Operação | Admin', loadComponent: () => import('./pages/admin/operacao-detalhe.component').then(m => m.OperacaoDetalheComponent) },
         { path: 'anormalidade/detalhe', title: 'Detalhe da Anormalidade | Admin', loadComponent: () => import('./pages/admin/anormalidade-detalhe.component').then(m => m.AnormalidadeDetalheComponent) },

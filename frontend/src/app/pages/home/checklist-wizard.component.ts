@@ -197,7 +197,22 @@ interface EditItem {
           </div>
           <div style="display:flex; justify-content:space-between">
             <a routerLink="/home" class="btn-secondary-custom">&larr; Voltar</a>
-            <button class="btn-primary-custom" [disabled]="!salaId" (click)="isMultiOperador ? step.set('operadores') : startWizard()">Avançar &rarr;</button>
+            <button class="btn-primary-custom" [disabled]="!salaId" (click)="proceedFromSetup()">Avançar &rarr;</button>
+          </div>
+        }
+
+        @if (step() === 'aviso' && avisoPendente()) {
+          <p class="text-muted-sm">Há um aviso para o {{ salaNome }}</p>
+          <div class="aviso-box">
+            <p class="aviso-msg">{{ avisoPendente()!.mensagem }}</p>
+          </div>
+          <label class="aviso-ciente">
+            <input type="checkbox" [(ngModel)]="avisoCiente">
+            Ciente
+          </label>
+          <div style="display:flex; justify-content:space-between; margin-top:20px">
+            <button class="btn-secondary-custom" (click)="step.set('setup')">&larr; Voltar</button>
+            <button class="btn-primary-custom" [disabled]="!avisoCiente" (click)="confirmarCiencia()">Avançar &rarr;</button>
           </div>
         }
 
@@ -299,6 +314,14 @@ interface EditItem {
     .wizard-info {
       background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dbeafe;
     }
+    .aviso-box {
+      background: #fff8db; border-left: 4px solid #f2c94c;
+      border-radius: 6px; padding: 14px 18px; margin: 14px 0;
+    }
+    .aviso-header { font-weight: 700; color: #7a5d00; font-size: .85rem; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+    .aviso-msg { margin: 0; white-space: pre-wrap; color: var(--text); font-size: 1rem; line-height: 1.4; }
+    .aviso-ciente { display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 8px 0; }
+    .aviso-ciente input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
     .wizard-label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
     .wizard-sala { font-size: 1.2rem; font-weight: 600; color: var(--text); }
     .wizard-item-title { font-size: 1.1rem; margin-bottom: 16px; }
@@ -369,7 +392,9 @@ export class ChecklistWizardComponent implements OnInit {
   private checklistId = 0;
 
   // ── Wizard (modo novo) ──
-  step = signal<'setup' | 'operadores' | 'wizard' | 'finish'>('setup');
+  step = signal<'setup' | 'aviso' | 'operadores' | 'wizard' | 'finish'>('setup');
+  avisoPendente = signal<{ id: string; numero: number; mensagem: string } | null>(null);
+  avisoCiente = false;
   dataOperacao = new Date().toISOString().split('T')[0];
   salaId = '';
   salaNome = '';
@@ -689,6 +714,38 @@ export class ChecklistWizardComponent implements OnInit {
     if (this.isMultiOperador) {
       this.lookup.loadOperadoresPlenario();
     }
+  }
+
+  proceedFromSetup(): void {
+    if (!this.salaId) return;
+    const sel = this.lookup.salas().find(s => String(s.id) === this.salaId);
+    this.salaNome = sel?.nome || '';
+    this.api.get<any>('/api/forms/checklist/aviso-pendente', { sala_id: this.salaId }).subscribe({
+      next: res => {
+        if (res?.data) {
+          this.avisoPendente.set(res.data);
+          this.avisoCiente = false;
+          this.step.set('aviso');
+        } else {
+          this.proceedAfterAviso();
+        }
+      },
+      error: () => this.proceedAfterAviso(),
+    });
+  }
+
+  private proceedAfterAviso(): void {
+    if (this.isMultiOperador) this.step.set('operadores');
+    else this.startWizard();
+  }
+
+  confirmarCiencia(): void {
+    const a = this.avisoPendente();
+    if (!a || !this.avisoCiente) return;
+    this.api.post(`/api/forms/checklist/aviso/${a.id}/ciencia`, {}).subscribe({
+      next: () => { this.avisoPendente.set(null); this.proceedAfterAviso(); },
+      error: () => this.toast.error('Erro ao registrar ciência.'),
+    });
   }
 
   startWizard(): void {
