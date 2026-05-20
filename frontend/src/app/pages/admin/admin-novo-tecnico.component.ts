@@ -27,7 +27,7 @@ import { ApiService } from '../../core/services/api.service';
         @if (errorMsg()) { <div class="error-box">{{ errorMsg() }}</div> }
 
         <div style="display:flex; justify-content:space-between; margin-top:20px">
-          <a routerLink="/admin" class="btn-secondary-custom">← Voltar</a>
+          <a routerLink="/admin/area-tecnica" class="btn-secondary-custom">← Voltar</a>
           <button type="submit" class="btn-primary-custom" [disabled]="saving()">
             {{ saving() ? 'Salvando...' : 'Salvar' }}
           </button>

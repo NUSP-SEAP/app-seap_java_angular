@@ -12,7 +12,7 @@ interface EditItem { id?: number | null; nome: string; ativo: boolean; tipo_widg
   imports: [FormsModule, RouterLink],
   template: `
     <h1>Edição de Formulários</h1>
-    <a routerLink="/admin" class="back-link">← Voltar ao Painel</a>
+    <a routerLink="/admin/operacao-audio" class="back-link">← Voltar</a>
 
     <!-- Cards de seleção -->
     <div class="grid-cards">
