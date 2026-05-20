@@ -89,6 +89,20 @@ public class AdminDashboardController {
         return pagedResponse(dashboardService.listOperadores(p, l, search, sort, direction, parseJson(filters)), p, l);
     }
 
+    // ══ Técnicos ══════════════════════════════════════════════
+
+    @GetMapping("/dashboard/tecnicos")
+    public ResponseEntity<?> tecnicos(
+            @RequestParam(defaultValue = "1") String page,
+            @RequestParam(defaultValue = "25") String limit,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "nome") String sort,
+            @RequestParam(defaultValue = "asc") String direction,
+            @RequestParam(required = false) String filters) {
+        int p = getInt(page, 1), l = getInt(limit, 25);
+        return pagedResponse(dashboardService.listTecnicos(p, l, search, sort, direction, parseJson(filters)), p, l);
+    }
+
     // ══ Checklists ════════════════════════════════════════════
 
     @GetMapping("/dashboard/checklists")

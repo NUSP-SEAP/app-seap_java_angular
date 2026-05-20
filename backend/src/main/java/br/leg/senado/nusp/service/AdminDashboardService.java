@@ -41,6 +41,22 @@ public class AdminDashboardService {
                 page, limit, search, sort, dir, null, filters);
     }
 
+    // ══ Técnicos ══════════════════════════════════════════════
+
+    private static final Map<String, String> TEC_SORT = Map.of(
+            "nome", "t.NOME_COMPLETO", "email", "t.EMAIL");
+
+    public PagedResult listTecnicos(int page, int limit, String search, String sort, String dir,
+                                     Map<String, Object> filters) {
+        return DashboardQueryHelper.executePagedQuery(em,
+                "t.ID, t.NOME_COMPLETO, t.EMAIL",
+                "FROM PES_TECNICO t",
+                null, TEC_SORT, List.of("t.NOME_COMPLETO", "t.EMAIL"),
+                Map.of("nome", "t.NOME_COMPLETO", "email", "t.EMAIL"),
+                Map.of("nome", "text", "email", "text"),
+                page, limit, search, sort, dir, null, filters);
+    }
+
     // ══ Checklists ════════════════════════════════════════════
 
     private static final Map<String, String> CL_SORT = new LinkedHashMap<>() {{

@@ -6,9 +6,6 @@ import { PaginationMeta } from '../../core/models/user.model';
 import { PaginationComponent } from '../../shared/components/pagination.component';
 import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../../shared/components/column-filter.component';
 import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
-import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
-import { FmtDateTimePipe } from '../../shared/pipes/fmt-datetime.pipe';
-import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 import { hojeDdMm } from '../../core/helpers/date.helpers';
 
 interface TableState extends ListParams {
@@ -18,18 +15,18 @@ interface TableState extends ListParams {
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent, FmtDatePipe, FmtTimePipe, FmtDateTimePipe],
+  imports: [RouterLink, FormsModule, PaginationComponent, ColumnFilterComponent],
   template: `
     <h1>Painel Administrativo</h1>
 
-    <!-- Cards de navegação -->
+    <!-- Cards de navegação (3 colunas × 2 linhas) -->
     <div class="grid-cards">
       <a routerLink="/home" class="card-custom card-link">Página Inicial dos Operadores</a>
-      <a routerLink="/admin/novo-operador" class="card-custom card-link">Cadastro de Operador</a>
-      <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
-      <a routerLink="/admin/operacoes" class="card-custom card-link">Operações de Áudio</a>
-      <a routerLink="/admin/form-edit" class="card-custom card-link">Edição de Formulários</a>
+      <a routerLink="/admin/operacao-audio" class="card-custom card-link">Operação de Áudio</a>
       <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa</a>
+      <a routerLink="/tecnico" class="card-custom card-link">Página Inicial dos Técnicos</a>
+      <a routerLink="/admin/area-tecnica" class="card-custom card-link">Área Técnica</a>
+      <span class="card-slot-empty"></span>
     </div>
 
     <!-- ═══ Operadores ═══ -->
@@ -100,106 +97,51 @@ interface TableState extends ListParams {
       <app-pagination [meta]="opMeta()!" (pageChange)="opState.page = $event; loadOperadores()" (limitChange)="opState.limit = $event; opState.page = 1; loadOperadores()" />
     </section>
 
-    <!-- ═══ Checklists ═══ -->
+    <!-- ═══ Técnicos ═══ -->
     <section>
       <div class="section-header">
-        <h2>Verificação de Plenários</h2>
+        <h2>Técnicos</h2>
         <div class="header-actions">
-          <input type="text" [(ngModel)]="chkSearch" (input)="onChkSearch()" placeholder="Buscar..." class="search-input">
-          <button class="btn-report" (click)="downloadReport('/api/admin/dashboard/checklists/relatorio', 'pdf')">PDF</button>
-          <button class="btn-report" (click)="downloadReport('/api/admin/dashboard/checklists/relatorio', 'docx')">DOCX</button>
+          <input type="text" [(ngModel)]="tecSearch" (input)="onTecSearch()" placeholder="Buscar..." class="search-input">
         </div>
       </div>
       <div class="table-container">
         <table class="data-table">
           <thead><tr>
-            <th style="width:30px"></th>
             <th>
-              <app-column-filter [col]="chkCols[0]"
-                [distinctValues]="getDistinct(chkMeta(), 'sala')"
-                [currentSort]="chkState.sort" [currentDir]="chkState.direction"
-                (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" />
+              <app-column-filter [col]="tecCols[0]"
+                [distinctValues]="getDistinct(tecMeta(), 'nome')"
+                [currentSort]="tecState.sort" [currentDir]="tecState.direction"
+                (sortChange)="onTecSort($event)" (filterChange)="onTecFilter($event)" />
             </th>
             <th>
-              <app-column-filter [col]="chkCols[1]"
-                [distinctValues]="getDistinct(chkMeta(), 'data')"
-                [currentSort]="chkState.sort" [currentDir]="chkState.direction"
-                (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" />
+              <app-column-filter [col]="tecCols[1]"
+                [distinctValues]="getDistinct(tecMeta(), 'email')"
+                [currentSort]="tecState.sort" [currentDir]="tecState.direction"
+                (sortChange)="onTecSort($event)" (filterChange)="onTecFilter($event)" />
             </th>
-            <th>
-              <app-column-filter [col]="chkCols[2]"
-                [distinctValues]="getDistinct(chkMeta(), 'nome')"
-                [currentSort]="chkState.sort" [currentDir]="chkState.direction"
-                (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" />
-            </th>
-            <th>Início</th>
-            <th>Término</th>
-            <th>Duração</th>
-            <th>
-              <app-column-filter [col]="chkCols[3]"
-                [distinctValues]="getDistinct(chkMeta(), 'turno')"
-                [currentSort]="chkState.sort" [currentDir]="chkState.direction"
-                (sortChange)="onChkSort($event)" (filterChange)="onChkFilter($event)" />
-            </th>
-            <th>Ação</th>
           </tr></thead>
           <tbody>
-            @if (chkRows().length === 0) {
-              <tr><td colspan="9" class="empty-state">{{ chkLoading() ? 'Carregando...' : 'Nenhum checklist encontrado.' }}</td></tr>
+            @if (tecRows().length === 0) {
+              <tr><td colspan="2" class="empty-state">{{ tecLoading() ? 'Carregando...' : 'Nenhum técnico cadastrado.' }}</td></tr>
             } @else {
-              @for (chk of chkRows(); track chk['id']) {
-                <tr [class.row-editado]="chk['editado']">
-                  <td><button class="btn-toggle" (click)="toggleAccordion(chk)">{{ chk['_expanded'] ? '▼' : '▶' }}</button></td>
-                  <td>
-                    <strong>{{ chk['sala_nome'] || chk['sala'] }}</strong>
-                    @if (chk['editado']) {
-                      <span class="badge-editado" [title]="'Editado em ' + (chk['ultima_edicao_em'] | fmtDateTime)"></span>
-                    }
-                  </td>
-                  <td>{{ chk['data'] | fmtDate }}</td>
-                  <td>{{ chk['operador_nome'] }}</td>
-                  <td>{{ chk['hora_inicio_testes'] | fmtTime }}</td>
-                  <td>{{ chk['hora_termino_testes'] | fmtTime }}</td>
-                  <td>{{ calcDuracao(chk) }}</td>
-                  <td [class]="chk['status'] === 'Falha' ? 'badge-falha' : 'badge-ok'">{{ chk['status'] || 'Ok' }}</td>
-                  <td><button class="btn-xs" (click)="openChecklistDetail(chk)">Formulário</button></td>
+              @for (t of tecRows(); track t['id']) {
+                <tr>
+                  <td><strong>{{ t['nome_completo'] || t['nome'] }}</strong></td>
+                  <td>{{ t['email'] }}</td>
                 </tr>
-                @if (chk['_expanded']) {
-                  <tr class="accordion-row">
-                    <td colspan="9">
-                      <strong class="accordion-title">Detalhes da Verificação:</strong>
-                      @if (!chk['itens']) {
-                        <p class="text-muted-sm">Carregando...</p>
-                      } @else if (asArray(chk['itens']).length === 0) {
-                        <p class="text-muted-sm">Nenhum item encontrado.</p>
-                      } @else {
-                        <table class="sub-table">
-                          <thead><tr><th>Item verificado</th><th>Status</th><th>Descrição</th></tr></thead>
-                          <tbody>
-                            @for (it of asArray(chk['itens']); track it['id'] || $index) {
-                              <tr>
-                                <td>{{ it['item_nome'] || it['item'] }}</td>
-                                <td [class]="it['tipo_widget'] === 'text' ? '' : (it['status'] === 'Falha' ? 'badge-falha' : 'badge-ok')">{{ it['tipo_widget'] === 'text' ? 'Texto' : it['status'] }}</td>
-                                <td>{{ it['descricao_falha'] || it['valor_texto'] || '-' }}</td>
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      }
-                    </td>
-                  </tr>
-                }
               }
             }
           </tbody>
         </table>
       </div>
-      <app-pagination [meta]="chkMeta()!" (pageChange)="chkState.page = $event; loadChecklists()" (limitChange)="chkState.limit = $event; chkState.page = 1; loadChecklists()" />
+      <app-pagination [meta]="tecMeta()!" (pageChange)="tecState.page = $event; loadTecnicos()" (limitChange)="tecState.limit = $event; tecState.page = 1; loadTecnicos()" />
     </section>
   `,
   styles: [`
     .grid-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:28px; }
     .card-link { display:flex; align-items:center; padding:16px 20px; text-decoration:none; color:var(--text); font-weight:600; font-size:.95rem; transition:box-shadow .15s; cursor:pointer; &:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);} }
+    .card-slot-empty { display:block; }
     .card-disabled { opacity:.6; cursor:default; &:hover{box-shadow:none;} }
     section { margin-bottom:28px; }
     .btn-xs-primary { background:var(--primary) !important; color:#fff !important; border-color:var(--primary) !important; }
@@ -221,7 +163,7 @@ interface TableState extends ListParams {
 })
 export class AdminDashboardComponent implements OnInit {
   private api = inject(ApiService);
-  private debounceOp: any; private debounceChk: any;
+  private debounceOp: any; private debounceTec: any;
 
   readonly hojeDdMm = hojeDdMm();
 
@@ -230,11 +172,9 @@ export class AdminDashboardComponent implements OnInit {
     { key: 'nome', label: 'Nome', type: 'text' },
     { key: 'email', label: 'E-mail', type: 'text' },
   ];
-  chkCols: ColumnFilterDef[] = [
-    { key: 'sala', label: 'Local', type: 'text' },
-    { key: 'data', label: 'Data', type: 'date' },
-    { key: 'nome', label: 'Verificado por', type: 'text' },
-    { key: 'turno', label: 'Status', type: 'text', sortable: false },
+  tecCols: ColumnFilterDef[] = [
+    { key: 'nome', label: 'Nome', type: 'text' },
+    { key: 'email', label: 'E-mail', type: 'text' },
   ];
 
   // ── Operadores ──
@@ -243,11 +183,11 @@ export class AdminDashboardComponent implements OnInit {
   opRows = signal<Record<string,unknown>[]>([]); opMeta = signal<PaginationMeta|null>(null); opLoading = signal(true);
   opSearch = '';
 
-  // ── Checklists ──
-  chkState: TableState = { page:1, limit:10, sort:'data', direction:'desc', search:'' };
-  chkFilters: Record<string, ColumnFilterState> = {};
-  chkRows = signal<Record<string,unknown>[]>([]); chkMeta = signal<PaginationMeta|null>(null); chkLoading = signal(true);
-  chkSearch = '';
+  // ── Técnicos ──
+  tecState: TableState = { page:1, limit:10, sort:'nome', direction:'asc', search:'' };
+  tecFilters: Record<string, ColumnFilterState> = {};
+  tecRows = signal<Record<string,unknown>[]>([]); tecMeta = signal<PaginationMeta|null>(null); tecLoading = signal(true);
+  tecSearch = '';
 
   // ── Toggle Plenário ──
   togglePlenario(op: Record<string,unknown>): void {
@@ -317,7 +257,7 @@ export class AdminDashboardComponent implements OnInit {
     });
   }
 
-  ngOnInit(): void { this.loadOperadores(); this.loadChecklists(); }
+  ngOnInit(): void { this.loadOperadores(); this.loadTecnicos(); }
 
   // ── Operadores ──
   loadOperadores(): void {
@@ -340,57 +280,26 @@ export class AdminDashboardComponent implements OnInit {
   }
   onOpSearch(): void { clearTimeout(this.debounceOp); this.debounceOp = setTimeout(() => { this.opState.search=this.opSearch; this.opState.page=1; this.loadOperadores(); }, 400); }
 
-  // ── Checklists ──
-  loadChecklists(): void {
-    this.chkLoading.set(true);
-    this.chkState.filters = buildFilters(this.chkFilters);
-    this.api.getList('/api/admin/dashboard/checklists', this.chkState).subscribe({
-      next: r => { this.chkRows.set(r.data||[]); this.chkMeta.set(r.meta||null); this.chkLoading.set(false); },
-      error: () => { this.chkRows.set([]); this.chkLoading.set(false); },
+  // ── Técnicos ──
+  loadTecnicos(): void {
+    this.tecLoading.set(true);
+    this.tecState.filters = buildFilters(this.tecFilters);
+    this.api.getList('/api/admin/dashboard/tecnicos', this.tecState).subscribe({
+      next: r => { this.tecRows.set(r.data||[]); this.tecMeta.set(r.meta||null); this.tecLoading.set(false); },
+      error: () => { this.tecRows.set([]); this.tecLoading.set(false); },
     });
   }
-  onChkSort(e: { sort: string; direction: string }): void {
-    this.chkState.sort = e.sort; this.chkState.direction = e.direction; this.chkState.page = 1;
-    this.loadChecklists();
+  onTecSort(e: { sort: string; direction: string }): void {
+    this.tecState.sort = e.sort; this.tecState.direction = e.direction; this.tecState.page = 1;
+    this.loadTecnicos();
   }
-  onChkFilter(e: { key: string; state: ColumnFilterState | null }): void {
-    if (e.state) this.chkFilters[e.key] = e.state;
-    else delete this.chkFilters[e.key];
-    this.chkState.page = 1;
-    this.loadChecklists();
+  onTecFilter(e: { key: string; state: ColumnFilterState | null }): void {
+    if (e.state) this.tecFilters[e.key] = e.state;
+    else delete this.tecFilters[e.key];
+    this.tecState.page = 1;
+    this.loadTecnicos();
   }
-  onChkSearch(): void { clearTimeout(this.debounceChk); this.debounceChk = setTimeout(() => { this.chkState.search=this.chkSearch; this.chkState.page=1; this.loadChecklists(); }, 400); }
-
-  toggleAccordion(row: Record<string,unknown>): void {
-    row['_expanded'] = !row['_expanded'];
-    if (row['_expanded'] && !row['itens']) {
-      this.api.get<any>('/api/admin/checklist/detalhe', { checklist_id: row['id'] as number }).subscribe({
-        next: (res: any) => {
-          const data = res?.data ?? res;
-          row['itens'] = data?.itens ?? [];
-          this.chkRows.set([...this.chkRows()]);
-        },
-        error: () => { row['itens'] = []; this.chkRows.set([...this.chkRows()]); },
-      });
-    }
-  }
-  openChecklistDetail(chk: Record<string,unknown>): void {
-    window.open(`/admin/checklist/detalhe?checklist_id=${chk['id']}`, '_blank');
-  }
-  asArray(v: unknown): any[] { return Array.isArray(v) ? v : []; }
-
-  calcDuracao(chk: Record<string, unknown>): string {
-    const inicio = String(chk['inicio'] || chk['hora_inicio_testes'] || '');
-    const termino = String(chk['termino'] || chk['hora_termino_testes'] || '');
-    if (!inicio || !termino) return '-';
-    const toSec = (t: string) => { const p = t.split(':'); return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0); };
-    const diff = toSec(termino) - toSec(inicio);
-    if (diff <= 0) return '-';
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const s = diff % 60;
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
+  onTecSearch(): void { clearTimeout(this.debounceTec); this.debounceTec = setTimeout(() => { this.tecState.search=this.tecSearch; this.tecState.page=1; this.loadTecnicos(); }, 400); }
 
   // ── Relatórios ──
   downloadReport(endpoint: string, format: string): void { this.api.downloadReport(endpoint, { format }); }
