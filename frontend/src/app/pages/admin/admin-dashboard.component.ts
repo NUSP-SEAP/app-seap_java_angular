@@ -1,7 +1,10 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { ApiService, ListParams } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { environment } from '../../../environments/environment';
 import { PaginationMeta } from '../../core/models/user.model';
 import { PaginationComponent } from '../../shared/components/pagination.component';
 import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../../shared/components/column-filter.component';
@@ -26,7 +29,9 @@ interface TableState extends ListParams {
       <a routerLink="/admin/agenda" class="card-custom card-link">Agenda Legislativa</a>
       <a routerLink="/tecnico" class="card-custom card-link">Página Inicial dos Técnicos</a>
       <a routerLink="/admin/area-tecnica" class="card-custom card-link">Área Técnica</a>
-      <span class="card-slot-empty"></span>
+      <a (click)="abrirAnalise()" class="card-custom card-link" [class.card-disabled]="abrindoAnalise()" role="button">
+        {{ abrindoAnalise() ? 'Abrindo Análise…' : 'Análise de Dados' }}
+      </a>
     </div>
 
     <!-- ═══ Operadores ═══ -->
@@ -163,7 +168,41 @@ interface TableState extends ListParams {
 })
 export class AdminDashboardComponent implements OnInit {
   private api = inject(ApiService);
+  private http = inject(HttpClient);
+  private auth = inject(AuthService);
   private debounceOp: any; private debounceTec: any;
+
+  abrindoAnalise = signal(false);
+
+  /**
+   * Pede ao backend um link assinado para o Metabase. O backend faz login
+   * programático no Metabase em nome do admin atual e devolve um cookie
+   * metabase.SESSION via Set-Cookie (Domain=.senado-nusp.cloud). O navegador
+   * já manda esse cookie quando abrimos a URL retornada em nova aba.
+   */
+  abrirAnalise(): void {
+    if (this.abrindoAnalise()) return;
+    this.abrindoAnalise.set(true);
+    const token = this.auth.getToken();
+    this.http.get<{ url: string }>(
+      `${environment.apiBaseUrl}/api/admin/metabase/link`,
+      {
+        withCredentials: true,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    ).subscribe({
+      next: r => {
+        this.abrindoAnalise.set(false);
+        window.open(r.url, '_blank', 'noopener');
+      },
+      error: e => {
+        this.abrindoAnalise.set(false);
+        const msg = e?.error?.error || e?.error?.message
+          || 'Não foi possível abrir o Metabase. Tente novamente.';
+        alert(msg);
+      },
+    });
+  }
 
   readonly hojeDdMm = hojeDdMm();
 

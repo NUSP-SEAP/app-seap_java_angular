@@ -69,6 +69,11 @@ services:
       GOOGLE_SHEETS_CREDENTIALS_PATH: /app/google-sheets-key.json
       GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID}
       GOOGLE_SHEETS_REFRESH_INTERVAL_SEC: ${GOOGLE_SHEETS_REFRESH_INTERVAL_SEC:-60}
+      METABASE_URL: ${METABASE_URL:-https://bi.senado-nusp.cloud}
+      METABASE_ADMIN_EMAIL: ${METABASE_ADMIN_EMAIL:-}
+      METABASE_ADMIN_PASSWORD: ${METABASE_ADMIN_PASSWORD:-}
+      METABASE_ENCRYPT_KEY: ${METABASE_ENCRYPT_KEY:-}
+      METABASE_COOKIE_DOMAIN: ${METABASE_COOKIE_DOMAIN:-.senado-nusp.cloud}
     volumes:
       - nusp-files:/app/files
       - /var/lib/senado_nusp_java/google-sheets-key.json:/app/google-sheets-key.json:ro

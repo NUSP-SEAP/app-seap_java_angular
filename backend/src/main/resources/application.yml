@@ -60,6 +60,13 @@ app:
     spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
     refresh-interval-sec: ${GOOGLE_SHEETS_REFRESH_INTERVAL_SEC:60}
     cessao-colors-hex: ${GOOGLE_SHEETS_CESSAO_COLORS:FFF2CC,FCE5CD}
+  metabase:
+    enabled: ${METABASE_ENABLED:true}
+    url: ${METABASE_URL:https://bi.senado-nusp.cloud}
+    admin-email: ${METABASE_ADMIN_EMAIL:nusp-metabase@outlook.com}
+    admin-password: ${METABASE_ADMIN_PASSWORD:}
+    encrypt-key: ${METABASE_ENCRYPT_KEY:}
+    cookie-domain: ${METABASE_COOKIE_DOMAIN:.senado-nusp.cloud}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
