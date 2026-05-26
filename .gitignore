@@ -11,6 +11,9 @@
 # ══ Credenciais (NUNCA commitar) ══
 docker/.env
 
+# ══ Metabase (banco interno H2 com dashboards/usuários — local por ambiente) ══
+docker/metabase-data/
+
 # ══ Backend (Java/Maven) ══
 backend/target/
 backend/*.jar
