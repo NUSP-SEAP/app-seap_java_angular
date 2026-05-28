@@ -343,6 +343,7 @@ const SALA_DEMAIS_SALAS_ID = 11;
     .label-sm { font-size: .8rem; }
     .badge-edited-sm { font-size: .6rem; }
     .field-ro { background: #f8fafc !important; pointer-events: none; }
+    textarea.field-ro { pointer-events: auto; }
     .hint-text { color: var(--muted); font-size: .8rem; margin: 6px 0 0; font-style: italic; }
     .form-actions {
       display: flex; justify-content: space-between; align-items: center;
