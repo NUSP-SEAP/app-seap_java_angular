@@ -23,3 +23,9 @@ databaseChangeLog:
       file: db/changelog/011-avisos-sala.yaml
   - include:
       file: db/changelog/012-metabase-sso.yaml
+  - include:
+      file: db/changelog/013-vw-operador-publico.yaml
+  - include:
+      file: db/changelog/014-metabase-dashboards.yaml
+  - include:
+      file: db/changelog/015-metabase-dashboards-seed.yaml
