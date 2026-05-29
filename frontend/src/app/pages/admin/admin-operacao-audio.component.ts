@@ -308,7 +308,7 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
             <th>Duração</th>
             <th>
               <app-column-filter [col]="chkCols[3]"
-                [distinctValues]="gd(chkMeta(), 'turno')"
+                [distinctValues]="gd(chkMeta(), 'status')"
                 [currentSort]="chkState.sort" [currentDir]="chkState.direction"
                 (sortChange)="onChkSortEvt($event)" (filterChange)="onChkFilterEvt($event)" />
             </th>
@@ -403,7 +403,7 @@ export class AdminOperacaoAudioComponent implements OnInit {
     { key: 'sala', label: 'Local', type: 'text' },
     { key: 'data', label: 'Data', type: 'date' },
     { key: 'nome', label: 'Verificado por', type: 'text' },
-    { key: 'turno', label: 'Status', type: 'text', sortable: false },
+    { key: 'status', label: 'Status', type: 'text', sortable: false },
   ];
 
   // ── Checklists ──

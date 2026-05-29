@@ -63,18 +63,26 @@ public class AdminDashboardService {
         put("data", "c.DATA_OPERACAO"); put("sala", "s.NOME"); put("nome", "o.NOME_COMPLETO");
     }};
 
+    /**
+     * Expressão SQL derivada do status do checklist: 'Falha' se houver qualquer resposta com falha,
+     * 'Ok' se houver respostas (sem falha) e '--' se não houver respostas.
+     * Reutilizada no SELECT (alias status) e como coluna filtrável/distinct ("Status").
+     */
+    private static final String CL_STATUS_EXPR =
+            "CASE WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha') THEN 'Falha' " +
+            "WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID) THEN 'Ok' ELSE '--' END";
+
     public PagedResult listChecklists(int page, int limit, String search, String sort, String dir,
                                        Map<String, Object> periodo, Map<String, Object> filters) {
         return DashboardQueryHelper.executePagedQuery(em,
                 "c.ID, c.DATA_OPERACAO AS data, s.NOME AS sala_nome, c.TURNO, " +
                 "o.NOME_COMPLETO AS operador_nome, c.HORA_INICIO_TESTES, c.HORA_TERMINO_TESTES, c.EDITADO, " +
                 "(SELECT MAX(h.EDITADO_EM) FROM FRM_CHECKLIST_HISTORICO h WHERE h.CHECKLIST_ID = c.ID) AS ultima_edicao_em, " +
-                "CASE WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID AND r.STATUS = 'Falha') THEN 'Falha' " +
-                "WHEN EXISTS (SELECT 1 FROM FRM_CHECKLIST_RESPOSTA r WHERE r.CHECKLIST_ID = c.ID) THEN 'Ok' ELSE '--' END AS status",
+                CL_STATUS_EXPR + " AS status",
                 "FROM FRM_CHECKLIST c JOIN CAD_SALA s ON s.ID = c.SALA_ID LEFT JOIN PES_OPERADOR o ON o.ID = c.CRIADO_POR",
                 "c.DATA_OPERACAO", CL_SORT, List.of("s.NOME", "o.NOME_COMPLETO"),
-                Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME", "turno", "c.TURNO", "nome", "o.NOME_COMPLETO"),
-                Map.of("data", "date", "sala", "text", "turno", "text", "nome", "text"),
+                Map.of("data", "c.DATA_OPERACAO", "sala", "s.NOME", "turno", "c.TURNO", "nome", "o.NOME_COMPLETO", "status", CL_STATUS_EXPR),
+                Map.of("data", "date", "sala", "text", "turno", "text", "nome", "text", "status", "text"),
                 page, limit, search, sort, dir, periodo, filters, "c.ID DESC");
     }
 
