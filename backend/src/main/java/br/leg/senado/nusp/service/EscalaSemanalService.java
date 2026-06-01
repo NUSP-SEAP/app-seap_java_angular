@@ -64,11 +64,15 @@ public class EscalaSemanalService {
                 .orElseThrow(() -> new ServiceValidationException("Escala não encontrada.", HttpStatus.NOT_FOUND));
         var result = toMap(escala);
 
-        var vinculos = escalaOpRepo.findByEscalaId(id);
+        var vinculos = escalaOpRepo.findByEscalaId(id); // já ordenado por sala_id, turno (M antes de V)
         // Agrupar por sala_id (IDs dos operadores — para edição)
         Map<Integer, List<String>> porSala = new LinkedHashMap<>();
+        // Mesmo agrupamento preservando o turno de cada operador (para rótulo M/V no detalhe)
+        Map<Integer, List<String[]>> turnoPorSala = new LinkedHashMap<>();
         for (var v : vinculos) {
             porSala.computeIfAbsent(v.getSalaId(), k -> new ArrayList<>()).add(v.getOperadorId());
+            turnoPorSala.computeIfAbsent(v.getSalaId(), k -> new ArrayList<>())
+                    .add(new String[]{v.getOperadorId(), v.getTurno()});
         }
         result.put("salas", porSala);
 
@@ -83,21 +87,31 @@ public class EscalaSemanalService {
         List<Map<String, Object>> resumo = new ArrayList<>();
         var salasOrdenadas = salaRepo.findAtivasOrdenadas();
         for (var sala : salasOrdenadas) {
-            var ops = porSala.get(sala.getId());
+            var ops = turnoPorSala.get(sala.getId());
             if (ops == null || ops.isEmpty()) continue;
             List<String> nomes = new ArrayList<>();
             List<String> ids = new ArrayList<>();
-            for (String opId : ops) {
+            List<Map<String, Object>> detalhe = new ArrayList<>();
+            for (String[] par : ops) {
+                String opId = par[0];
+                String turno = par[1];
                 operadorRepo.findById(opId).ifPresent(op -> {
                     nomes.add(op.getNomeExibicao());
                     ids.add(op.getId());
+                    Map<String, Object> od = new LinkedHashMap<>();
+                    od.put("id", op.getId());
+                    od.put("nome", op.getNomeExibicao());
+                    od.put("turno", turno);
+                    detalhe.add(od);
                 });
             }
-            resumo.add(Map.of(
-                    "sala_nome", sala.getNome(),
-                    "operadores", String.join(", ", nomes),
-                    "operadores_ids", ids
-            ));
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("sala_id", sala.getId());
+            item.put("sala_nome", sala.getNome());
+            item.put("operadores", String.join(", ", nomes));
+            item.put("operadores_ids", ids);
+            item.put("operadores_detalhe", detalhe);
+            resumo.add(item);
         }
         // Anexar funções ao resumo na ordem fixa: Apoio antes, Fechamento depois
         adicionarFuncaoNoResumo(resumo, porFuncao, "APOIO_COMISSOES", "Apoio às Comissões");
@@ -120,11 +134,12 @@ public class EscalaSemanalService {
                 ids.add(op.getId());
             });
         }
-        resumo.add(Map.of(
-                "sala_nome", label,
-                "operadores", String.join(", ", nomes),
-                "operadores_ids", ids
-        ));
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("sala_nome", label);
+        item.put("operadores", String.join(", ", nomes));
+        item.put("operadores_ids", ids);
+        item.put("operadores_detalhe", new ArrayList<>()); // funções não têm turno → sem rótulo nem botão
+        resumo.add(item);
     }
 
     // ══ Criar/Atualizar escala ══════════════════════════════════
@@ -132,6 +147,7 @@ public class EscalaSemanalService {
     @Transactional
     public Map<String, Object> salvarEscala(Long id, LocalDate dataInicio, LocalDate dataFim,
                                             Map<Integer, List<String>> salasOperadores,
+                                            Map<Integer, Map<String, String>> turnosPorSala,
                                             Map<String, List<String>> funcoes,
                                             String criadoPor) {
         if (dataInicio == null || dataFim == null) {
@@ -154,20 +170,25 @@ public class EscalaSemanalService {
         escala.setDataFim(dataFim);
         escala = escalaRepo.save(escala);
 
-        // Recriar vínculos de sala
+        // Recriar vínculos de sala. O turno vem do payload (definido/invertido no editor);
+        // se não vier (ex.: geração por rodízio), usa o turno padrão do operador (PES_OPERADOR).
         escalaOpRepo.deleteByEscalaId(escala.getId());
         if (salasOperadores != null) {
             for (var entry : salasOperadores.entrySet()) {
                 int salaId = entry.getKey();
+                Map<String, String> turnosSala = (turnosPorSala != null) ? turnosPorSala.get(salaId) : null;
                 for (String operadorId : entry.getValue()) {
                     var eo = new EscalaOperador();
                     eo.setEscalaId(escala.getId());
                     eo.setSalaId(salaId);
                     eo.setOperadorId(operadorId);
-                    // Snapshot do turno atual do operador no momento da escala
-                    eo.setTurno(operadorRepo.findById(operadorId)
-                            .map(o -> o.getTurno() != null ? o.getTurno() : "M")
-                            .orElse("M"));
+                    String turnoPayload = (turnosSala != null) ? turnosSala.get(operadorId) : null;
+                    if ("M".equals(turnoPayload) || "V".equals(turnoPayload)) {
+                        eo.setTurno(turnoPayload);
+                    } else {
+                        eo.setTurno(operadorRepo.findById(operadorId)
+                                .map(o -> o.getTurno() != null ? o.getTurno() : "M").orElse("M"));
+                    }
                     escalaOpRepo.save(eo);
                 }
             }
@@ -246,14 +267,16 @@ public class EscalaSemanalService {
     /**
      * Gera escala por rodízio cíclico das vagas.
      * Cada vaga (sala + slot M/V) na escala anterior rotaciona para a próxima sala do ciclo,
-     * mantendo seu ocupante. Operadores que mudaram de turno ou saíram da escala liberam vaga,
-     * que é preenchida por entrantes/operadores que mudaram para o turno daquela vaga.
-     * Slots vazios na escala anterior continuam vazios após a rotação.
+     * mantendo seu ocupante. A reconstrução usa o turno ATUAL do operador (PES_OPERADOR), não
+     * o turno gravado na escala — então inversões manuais de turno por plenário NÃO afetam o
+     * rodízio, e operadores duplicados na escala anterior entram uma única vez. Quem saiu da
+     * escala (ou cuja vaga colidiu) libera vaga, preenchida por entrantes via sorteio.
+     * Slots sem ninguém continuam vazios após a rotação.
      */
     @Transactional
     public Map<String, Object> gerarEscalaRodizio(LocalDate dataInicio, LocalDate dataFim, String criadoPor) {
         Map<Integer, List<String>> salasOperadores = gerarMapaRodizio(dataInicio, dataFim);
-        return salvarEscala(null, dataInicio, dataFim, salasOperadores, null, criadoPor);
+        return salvarEscala(null, dataInicio, dataFim, salasOperadores, null, null, criadoPor);
     }
 
     @Transactional(readOnly = true)
@@ -287,7 +310,6 @@ public class EscalaSemanalService {
             throw new ServiceValidationException("Há " + partV.size() +
                     " operadores no turno Vespertino, máximo 8. Ajuste antes de gerar a escala.");
         }
-        Set<String> participantesIds = turnoAtual.keySet();
 
         // 2. Resolver IDs das salas do ciclo
         Map<String, Integer> nomeParaId = new HashMap<>();
@@ -324,19 +346,33 @@ public class EscalaSemanalService {
         } else {
             // MODO ROTAÇÃO — pega vagas da anterior, ajusta, depois rotaciona
             Map<Integer, Map<String, String>> ant = inicializarSlots(ciclo);
+            Set<String> jaNaAnterior = new HashSet<>();
             for (var v : escalaOpRepo.findByEscalaId(escalaAnterior.getId())) {
                 var slots = ant.get(v.getSalaId());
-                if (slots != null) slots.put(v.getTurno(), v.getOperadorId());
+                if (slots == null) continue;
+                String opId = v.getOperadorId();
+                // Usa o turno ORIGINAL do operador (PES_OPERADOR), não o snapshot da escala:
+                // inversões manuais de turno na escala anterior NÃO afetam o rodízio.
+                String turnoOriginal = turnoAtual.get(opId);
+                if (turnoOriginal == null) continue;        // não participa mais → não carrega
+                if (jaNaAnterior.contains(opId)) continue;   // de-dup: ignora cópia extra do mesmo operador
+                if (slots.get(turnoOriginal) != null) {      // vaga do turno já ocupada (ex.: colega mudou de turno)
+                    log.info("Rodízio: operador {} não mantido na sala {} (slot {} já ocupado por {}); será realocado.",
+                            opId, v.getSalaId(), turnoOriginal, slots.get(turnoOriginal));
+                    continue;
+                }
+                slots.put(turnoOriginal, opId);
+                jaNaAnterior.add(opId);
             }
 
-            // Vagas que se mantêm: operador continua participando E mantém o mesmo turno
+            // Copiar as vagas reconstruídas para a base. 'ant' já foi montada com o turno ATUAL
+            // de cada operador (não o snapshot da escala), então toda vaga já reflete o turno
+            // vigente — inversões manuais não chegam aqui, e quem mudou de turno já entrou no
+            // slot novo. Quem ficou de fora (colisão/saída) é realocado adiante via dispM/dispV.
             for (int sId : ciclo) {
                 for (String slot : List.of("M", "V")) {
                     String opId = ant.get(sId).get(slot);
-                    if (opId == null) continue;
-                    if (!participantesIds.contains(opId)) continue;
-                    if (!slot.equals(turnoAtual.get(opId))) continue;
-                    base.get(sId).put(slot, opId);
+                    if (opId != null) base.get(sId).put(slot, opId);
                 }
             }
 

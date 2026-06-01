@@ -62,7 +62,15 @@ import { PaginationMeta } from '../../core/models/user.model';
                             @for (item of asArray(esc['_resumo']); track item['sala_nome']) {
                               <tr>
                                 <td><strong>{{ item['sala_nome'] }}</strong></td>
-                                <td>{{ item['operadores'] }}</td>
+                                <td>
+                                  @if (asArray(item['operadores_detalhe']).length > 0) {
+                                    @for (op of asArray(item['operadores_detalhe']); track op['id']; let last = $last) {
+                                      <span>{{ op['nome'] }} <span class="turno-tag">({{ op['turno'] === 'M' ? 'Manhã' : 'Tarde' }})</span></span>{{ last ? '' : ', ' }}
+                                    }
+                                  } @else {
+                                    {{ item['operadores'] }}
+                                  }
+                                </td>
                               </tr>
                             }
                           </tbody>
@@ -122,7 +130,12 @@ import { PaginationMeta } from '../../core/models/user.model';
         @if (salaAtual(); as sala) {
           <div class="plenario-section">
             <div class="plenario-header">
-              <strong>{{ sala.nome }}</strong>
+              <div class="plenario-title">
+                <strong>{{ sala.nome }}</strong>
+                <button class="btn-inverter" type="button" (click)="inverterTurnoSala(sala.id)"
+                  [disabled]="getOperadoresSala(sala.id).length === 0"
+                  title="Inverte quem é Manhã e quem é Tarde neste plenário (só grava ao Atualizar)">⇅ Inverter turno</button>
+              </div>
               <div class="plenario-header-info">
                 <span class="plenario-counter">{{ salaAtualIndex() + 1 }} de {{ salasNumeradas().length }}</span>
                 <span class="badge-count">{{ getOperadoresSala(sala.id).length }} operador(es)</span>
@@ -136,6 +149,9 @@ import { PaginationMeta } from '../../core/models/user.model';
                     [checked]="isSelected(sala.id, op.id)"
                     (change)="toggleOperador(sala.id, op.id)">
                   <span>{{ op.nome_completo || op.nome }}</span>
+                  @if (turnoDe(sala.id, op.id); as t) {
+                    <span class="turno-tag">{{ t === 'M' ? 'Manhã' : 'Tarde' }}</span>
+                  }
                   @if (getOutrosPlenarios(sala.id, op.id).length > 0) {
                     <span class="badge-outros">{{ getOutrosPlenarios(sala.id, op.id).join(', ') }}</span>
                   }
@@ -239,6 +255,14 @@ import { PaginationMeta } from '../../core/models/user.model';
     .funcoes-editor { margin-top:16px; }
 
     .escalas-section { margin-top:8px; }
+    .turno-tag { color:var(--muted); font-size:.72rem; white-space:nowrap; }
+    .plenario-title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .btn-inverter {
+      background:var(--card); color:var(--text); border:1px solid var(--border);
+      border-radius:999px; padding:3px 12px; font-size:.78rem; font-weight:600; cursor:pointer; white-space:nowrap;
+      &:hover:not(:disabled) { background:var(--row-hover); }
+      &:disabled { opacity:.45; cursor:not-allowed; }
+    }
     .btn-xs-danger {
       background:#dc2626 !important; color:#fff !important;
       border-color:#dc2626 !important;
@@ -278,8 +302,8 @@ export class AdminEscalaComponent implements OnInit {
   editandoId = signal<number | null>(null);
   salvando = signal(false);
 
-  // Seleção: Map<sala_id, Set<operador_id>> — signal para trigger change detection
-  selecao = signal(new Map<number, Set<string>>());
+  // Seleção: Map<sala_id, Map<operador_id, turno('M'/'V')>> — signal para trigger change detection
+  selecao = signal(new Map<number, Map<string, string>>());
   salaAtualIndex = signal(0);
 
   // Funções (Apoio às Comissões, Fechamento dos Plenários)
@@ -330,15 +354,38 @@ export class AdminEscalaComponent implements OnInit {
   toggleOperador(salaId: number | string, opId: number | string): void {
     const map = this.selecao();
     const key = Number(salaId);
-    if (!map.has(key)) map.set(key, new Set());
-    const set = map.get(key)!;
+    if (!map.has(key)) map.set(key, new Map());
+    const inner = map.get(key)!;
     const id = String(opId);
-    if (set.has(id)) set.delete(id); else set.add(id);
+    if (inner.has(id)) inner.delete(id);
+    else inner.set(id, this.defaultTurno(id));
     this.selecao.set(new Map(map));
   }
 
   getOperadoresSala(salaId: number | string): string[] {
-    return Array.from(this.selecao().get(Number(salaId)) || []);
+    return Array.from(this.selecao().get(Number(salaId))?.keys() || []);
+  }
+
+  /** Turno padrão do operador (PES_OPERADOR), vindo do lookup. */
+  private defaultTurno(opId: string): string {
+    const op = this.lookup.operadores().find(o => String(o.id) === opId);
+    return op?.turno === 'V' ? 'V' : 'M';
+  }
+
+  /** Turno do operador nesta sala (null se não selecionado) — para o rótulo Manhã/Tarde. */
+  turnoDe(salaId: number | string, opId: number | string): string | null {
+    return this.selecao().get(Number(salaId))?.get(String(opId)) ?? null;
+  }
+
+  /** Inverte (M↔V) o turno dos selecionados no plenário — só localmente; grava ao Atualizar. */
+  inverterTurnoSala(salaId: number | string): void {
+    const map = this.selecao();
+    const inner = map.get(Number(salaId));
+    if (!inner || inner.size === 0) return;
+    for (const [opId, turno] of inner.entries()) {
+      inner.set(opId, turno === 'M' ? 'V' : 'M');
+    }
+    this.selecao.set(new Map(map));
   }
 
   voltarPlenario(): void {
@@ -412,11 +459,15 @@ export class AdminEscalaComponent implements OnInit {
 
     this.salvando.set(true);
 
-    // Montar payload
+    // Montar payload (salas = ids; turnos = id->M/V por sala)
     const salas: Record<string, string[]> = {};
+    const turnos: Record<string, Record<string, string>> = {};
     for (const [salaId, ops] of this.selecao().entries()) {
       if (ops.size > 0) {
-        salas[String(salaId)] = Array.from(ops);
+        salas[String(salaId)] = Array.from(ops.keys());
+        const t: Record<string, string> = {};
+        for (const [opId, turno] of ops.entries()) t[opId] = turno;
+        turnos[String(salaId)] = t;
       }
     }
 
@@ -431,6 +482,7 @@ export class AdminEscalaComponent implements OnInit {
       data_inicio: this.dataInicio,
       data_fim: this.dataFim,
       salas,
+      turnos,
       funcoes,
     };
     if (this.editandoId()) payload.id = this.editandoId();
@@ -458,10 +510,12 @@ export class AdminEscalaComponent implements OnInit {
     }).subscribe({
       next: (res: any) => {
         this.salvando.set(false);
-        const novaSelecao = new Map<number, Set<string>>();
+        const novaSelecao = new Map<number, Map<string, string>>();
         const salas = res.data?.salas || {};
         for (const [salaId, ops] of Object.entries(salas)) {
-          novaSelecao.set(Number(salaId), new Set((ops as unknown[]).map(String)));
+          const inner = new Map<string, string>();
+          for (const opId of (ops as unknown[]).map(String)) inner.set(opId, this.defaultTurno(opId));
+          novaSelecao.set(Number(salaId), inner);
         }
         this.selecao.set(novaSelecao);
         this.salaAtualIndex.set(0);
@@ -484,10 +538,15 @@ export class AdminEscalaComponent implements OnInit {
     this.api.get<any>(`/api/admin/escala/${esc['id']}`).subscribe({
       next: (res: any) => {
         const data = res.data || {};
-        const novaSelecao = new Map<number, Set<string>>();
-        const salas = data['salas'] || {};
-        for (const [salaId, ops] of Object.entries(salas)) {
-          novaSelecao.set(Number(salaId), new Set(ops as string[]));
+        // Selecao com turno por (sala, operador), vindo do resumo (operadores_detalhe)
+        const novaSelecao = new Map<number, Map<string, string>>();
+        for (const item of (data['resumo'] || [])) {
+          if (item['sala_id'] == null) continue; // pula funções
+          const inner = new Map<string, string>();
+          for (const od of (item['operadores_detalhe'] || [])) {
+            inner.set(String(od['id']), od['turno'] === 'V' ? 'V' : 'M');
+          }
+          novaSelecao.set(Number(item['sala_id']), inner);
         }
         this.selecao.set(novaSelecao);
 

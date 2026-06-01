@@ -10,7 +10,8 @@ import { FmtDatePipe } from '../../shared/pipes/fmt-date.pipe';
 import { FmtTimePipe } from '../../shared/pipes/fmt-time.pipe';
 import { hojeDdMm } from '../../core/helpers/date.helpers';
 
-interface EscalaResumoItem { sala_nome: string; operadores: string; operadores_ids: string[]; }
+interface OperadorTurno { id: string; nome: string; turno: string; }
+interface EscalaResumoItem { sala_nome: string; operadores: string; operadores_ids: string[]; operadores_detalhe?: OperadorTurno[]; }
 interface EscalaResumoRow { left: EscalaResumoItem; right: EscalaResumoItem | null; }
 interface EscalaFuncoes { apoio: EscalaResumoItem | null; fechamento: EscalaResumoItem | null; }
 
@@ -88,28 +89,44 @@ interface TableState extends ListParams {
                         <p class="text-muted-sm">Nenhum operador escalado.</p>
                       } @else {
                         <table class="sub-table escala-sub-table">
-                          <thead><tr>
-                            <th>Sala</th><th>Operadores</th>
-                            <th>Sala</th><th>Operadores</th>
-                          </tr></thead>
+                          <thead>
+                            <tr>
+                              <th rowspan="2">Sala</th><th colspan="2">Operadores</th>
+                              <th rowspan="2" class="td-half">Sala</th><th colspan="2">Operadores</th>
+                            </tr>
+                            <tr>
+                              <th>Manhã</th><th class="td-tarde">Tarde</th>
+                              <th>Manhã</th><th class="td-tarde">Tarde</th>
+                            </tr>
+                          </thead>
                           <tbody>
                             @for (row of asEscalaRows(esc['_resumoRows']); track $index) {
                               <tr>
                                 <td><strong>{{ row.left.sala_nome }}</strong></td>
                                 <td>
-                                  @for (nome of splitNomes(row.left.operadores); track $index; let last = $last) {
-                                    <span [class.operador-destaque]="ehUsuarioLogado(row.left, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                  @for (o of porTurno(row.left, 'M'); track o.id; let last = $last) {
+                                    <span [class.operador-destaque]="ehUsuarioId(o.id)">{{ o.nome }}</span>@if (!last) {<span>, </span>}
+                                  }
+                                </td>
+                                <td class="td-tarde">
+                                  @for (o of porTurno(row.left, 'V'); track o.id; let last = $last) {
+                                    <span [class.operador-destaque]="ehUsuarioId(o.id)">{{ o.nome }}</span>@if (!last) {<span>, </span>}
                                   }
                                 </td>
                                 @if (row.right) {
-                                  <td><strong>{{ row.right.sala_nome }}</strong></td>
+                                  <td class="td-half"><strong>{{ row.right.sala_nome }}</strong></td>
                                   <td>
-                                    @for (nome of splitNomes(row.right!.operadores); track $index; let last = $last) {
-                                      <span [class.operador-destaque]="ehUsuarioLogado(row.right!, $index)">{{ nome }}</span>@if (!last) {<span>, </span>}
+                                    @for (o of porTurno(row.right!, 'M'); track o.id; let last = $last) {
+                                      <span [class.operador-destaque]="ehUsuarioId(o.id)">{{ o.nome }}</span>@if (!last) {<span>, </span>}
+                                    }
+                                  </td>
+                                  <td class="td-tarde">
+                                    @for (o of porTurno(row.right!, 'V'); track o.id; let last = $last) {
+                                      <span [class.operador-destaque]="ehUsuarioId(o.id)">{{ o.nome }}</span>@if (!last) {<span>, </span>}
                                     }
                                   </td>
                                 } @else {
-                                  <td></td><td></td>
+                                  <td class="td-half"></td><td></td><td class="td-tarde"></td>
                                 }
                               </tr>
                             }
@@ -299,8 +316,9 @@ interface TableState extends ListParams {
     .operador-destaque { font-weight: bold; color: var(--color-blue, #003b63); }
     .escala-sub-table {
       th, td { padding: 6px 12px; }
-      th:nth-child(3) { border-left: 2px solid var(--border); }
-      td:nth-child(3) { border-left: 2px solid var(--border); }
+      thead th { text-align: center; }
+      th.td-half, td.td-half { border-left: 2px solid var(--border); }
+      th.td-tarde, td.td-tarde { border-left: 1px solid var(--border); }
     }
     .escala-funcoes-table {
       margin-top: 12px;
@@ -505,6 +523,16 @@ export class HomeComponent implements OnInit {
   ehUsuarioLogado(item: EscalaResumoItem, idx: number): boolean {
     const userId = this.auth.user()?.id;
     return !!userId && item.operadores_ids?.[idx] === userId;
+  }
+
+  /** Operadores de um plenário filtrados por turno ('M'/'V') — para as colunas Manhã/Tarde. */
+  porTurno(item: EscalaResumoItem, turno: string): OperadorTurno[] {
+    return (item?.operadores_detalhe || []).filter(o => o.turno === turno);
+  }
+
+  ehUsuarioId(id: string): boolean {
+    const userId = this.auth.user()?.id;
+    return !!userId && id === userId;
   }
 
   // ── Helpers ──

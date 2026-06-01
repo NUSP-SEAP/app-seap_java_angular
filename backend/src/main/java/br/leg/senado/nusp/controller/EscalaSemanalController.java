@@ -78,7 +78,21 @@ public class EscalaSemanalController {
             }
         }
 
-        var result = escalaService.salvarEscala(id, dataInicio, dataFim, salasOperadores, funcoes, principal.getUsername());
+        // Converter turnos por sala: { "3": {"uuid1":"M","uuid2":"V"} } — turno definido no editor
+        Map<Integer, Map<String, String>> turnosPorSala = new LinkedHashMap<>();
+        Object turnosRaw = payload.get("turnos");
+        if (turnosRaw instanceof Map<?, ?> turnosMap) {
+            for (var entry : turnosMap.entrySet()) {
+                int salaId = Integer.parseInt(entry.getKey().toString());
+                Map<String, String> inner = new LinkedHashMap<>();
+                if (entry.getValue() instanceof Map<?, ?> m) {
+                    for (var e2 : m.entrySet()) inner.put(e2.getKey().toString(), String.valueOf(e2.getValue()));
+                }
+                turnosPorSala.put(salaId, inner);
+            }
+        }
+
+        var result = escalaService.salvarEscala(id, dataInicio, dataFim, salasOperadores, turnosPorSala, funcoes, principal.getUsername());
         HttpStatus status = id != null ? HttpStatus.OK : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(Map.of("ok", true, "data", result));
     }

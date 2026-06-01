@@ -42,7 +42,8 @@ public class LookupController {
                 .map(o -> Map.<String, Object>of(
                         "id", o.getId(),
                         "nome_completo", o.getNomeCompleto(),
-                        "participa_escala", Boolean.TRUE.equals(o.getParticipaEscala())))
+                        "participa_escala", Boolean.TRUE.equals(o.getParticipaEscala()),
+                        "turno", o.getTurno() != null ? o.getTurno() : "M"))
                 .toList();
         return ResponseEntity.ok(Map.of("ok", true, "data", data));
     }
