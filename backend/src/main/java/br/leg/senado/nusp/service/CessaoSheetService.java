@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.io.FileInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -40,14 +42,20 @@ import java.util.stream.Collectors;
 /**
  * Lê cessões de sala da planilha Google Sheets ("Reserva Plenários das comissões").
  *
- * Identificação de cessão: célula com cor de fundo {@code #FFF2CC} (creme).
- * As demais cores representam comissões regulares (azul/marrom) e não são lidas.
+ * Identificação de cessão: célula com cor de fundo creme ({@code #FFF2CC} ou {@code #FCE5CD})
+ * e/ou, no layout novo, o marcador textual "Cessão". As demais cores representam comissões
+ * regulares (azul/marrom) e não são lidas.
  *
- * Layout da planilha:
- *   - Coluna A   = data (forward-fill: vale para as próximas linhas até nova data)
- *   - Colunas B/D/F/H/J/L/N/P = horário do plenário correspondente
- *   - Colunas C/E/G/I/K/M/O/Q = evento do plenário correspondente
- *   - Coluna R   = Sala de Reuniões
+ * A planilha existe em dois layouts (detectados dinamicamente — ver {@link #detectarLayout}):
+ *
+ *   - ANTIGO (até maio/2026): cada plenário ocupa 2 colunas — {@code [horário][evento]}.
+ *       Cabeçalhos "Plenário N" espaçados de 2 em 2 (B, D, F, H, J, L, N, P).
+ *   - NOVO (a partir de junho/2026): cada plenário ocupa 4 colunas —
+ *       {@code [horário]["Cessão"][descrição][status]}. Cabeçalhos espaçados de 4 em 4
+ *       (B, F, J, N, R, V, Z, AD).
+ *
+ * Em ambos: coluna A = data (forward-fill, vale para as próximas linhas até nova data) e
+ * "Sala de Reuniões" à direita do último plenário (cabeçalho na 1ª linha).
  *
  * Polling a cada {@code app.sheets.refresh-interval-sec} segundos. Cache em memória.
  */
@@ -81,18 +89,10 @@ public class CessaoSheetService {
     // ── Cores-alvo (cada item = [r, g, b] em float 0..1) ─────────
     private List<float[]> targetColors = Collections.emptyList();
 
-    // ── Mapeamento coluna planilha → nome de sala ────────────────
-    private static final Map<String, String> COL_TO_SALA = Map.of(
-            "C", "Plenário 06",
-            "E", "Plenário 02",
-            "G", "Plenário 03",
-            "I", "Plenário 07",
-            "K", "Plenário 09",
-            "M", "Plenário 13",
-            "O", "Plenário 15",
-            "Q", "Plenário 19",
-            "R", "Sala de Reuniões"
-    );
+    // ── Cabeçalho de plenário na planilha (ex: "Plenário 6", "Plenário 13") ──
+    private static final Pattern PLENARIO_HEADER = Pattern.compile(
+            "plen[aá]rio\\s*(\\d+)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS);
 
     // ── Mapeamento nome de sala → sala_id (carregado após DB up) ─
     private volatile Map<String, Integer> salaNomeToId = null;
@@ -228,6 +228,13 @@ public class CessaoSheetService {
         List<RowData> rows = dataList.get(0).getRowData();
         if (rows == null) return Collections.emptyList();
 
+        // Detecta o layout (antigo 2 col / novo 4 col) a partir do cabeçalho da aba
+        List<Bloco> blocos = detectarLayout(rows);
+        if (blocos.isEmpty()) {
+            log.warn("Layout da aba '{}' não reconhecido (nenhum cabeçalho de plenário)", abaNome);
+            return Collections.emptyList();
+        }
+
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate dataAtual = null;
         int linhasNoBlocoAtual = 0;
@@ -257,23 +264,29 @@ public class CessaoSheetService {
             if (dataAtual == null) continue;
             if (!dataAtual.equals(hoje)) continue;  // só a data alvo
 
-            // Para cada coluna mapeada (C, E, G, ...), checa cor + valor
-            for (Map.Entry<String, String> entry : COL_TO_SALA.entrySet()) {
-                int colIdx = colLetraParaIndice(entry.getKey());
-                if (colIdx >= cells.size()) continue;
-                CellData cell = cells.get(colIdx);
-                if (cell == null) continue;
-                if (!isCessao(cell)) continue;
-                String evento = cell.getFormattedValue();
+            // Para cada bloco de plenário detectado, checa cessão (cor/marcador) + valor
+            for (Bloco b : blocos) {
+                if (b.colEvento() >= cells.size()) continue;
+                CellData evCell = cells.get(b.colEvento());
+                if (evCell == null) continue;
+
+                // Cessão = evento creme OU (layout novo) marcador "Cessão" na coluna do meio
+                boolean ehCessao = isCessao(evCell);
+                if (!ehCessao && b.colMarcador() >= 0 && b.colMarcador() < cells.size()) {
+                    ehCessao = isMarcadorCessao(cells.get(b.colMarcador()));
+                }
+                if (!ehCessao) continue;
+
+                String evento = evCell.getFormattedValue();
                 if (evento == null || evento.isBlank()) continue;
 
                 String horario = null;
-                int colHorario = colIdx - 1;  // coluna anterior tem o horário
-                if (colHorario >= 0 && colHorario < cells.size() && cells.get(colHorario) != null) {
-                    horario = cells.get(colHorario).getFormattedValue();
+                if (b.colHorario() >= 0 && b.colHorario() < cells.size()
+                        && cells.get(b.colHorario()) != null) {
+                    horario = cells.get(b.colHorario()).getFormattedValue();
                 }
 
-                String salaNome = entry.getValue();
+                String salaNome = b.salaNome();
                 Integer salaId = salaNomeToId != null ? salaNomeToId.get(salaNome) : null;
 
                 Map<String, Object> item = new LinkedHashMap<>();
@@ -375,13 +388,108 @@ public class CessaoSheetService {
         };
     }
 
-    /** Converte letra de coluna ("A"=0, "B"=1, ..., "Z"=25, "AA"=26) para índice 0-based. */
-    private int colLetraParaIndice(String letra) {
-        int idx = 0;
-        for (char c : letra.toUpperCase().toCharArray()) {
-            idx = idx * 26 + (c - 'A' + 1);
+    // ══ Detecção de layout (cabeçalho dinâmico) ═════════════════
+
+    /** Bloco de colunas de um plenário/sala dentro de uma linha (colMarcador = -1 no layout antigo). */
+    private record Bloco(int colHorario, int colEvento, int colMarcador, String salaNome) {}
+
+    /**
+     * Lê o cabeçalho da aba e monta os blocos de cada plenário, detectando se o layout é o
+     * antigo (2 colunas/plenário) ou o novo (4 colunas/plenário) pela distância entre os
+     * cabeçalhos "Plenário N". Retorna lista vazia se nenhum cabeçalho for encontrado.
+     */
+    private List<Bloco> detectarLayout(List<RowData> rows) {
+        // 1. Linha de cabeçalho = a que tem mais células "Plenário N" entre as primeiras 8
+        int headerRow = -1, melhor = 0;
+        int limite = Math.min(8, rows.size());
+        for (int i = 0; i < limite; i++) {
+            int cnt = contarPlenarios(rows.get(i));
+            if (cnt > melhor) { melhor = cnt; headerRow = i; }
         }
-        return idx - 1;
+        if (headerRow < 0) return Collections.emptyList();
+
+        // 2. Coluna → nome de sala (zero-padded p/ casar com CAD_SALA: "Plenário 06")
+        TreeMap<Integer, String> plenarios = new TreeMap<>();
+        List<CellData> hcells = rows.get(headerRow).getValues();
+        for (int ci = 0; ci < hcells.size(); ci++) {
+            Matcher m = PLENARIO_HEADER.matcher(valor(hcells.get(ci)));
+            if (m.find()) {
+                plenarios.put(ci, String.format("Plenário %02d", Integer.parseInt(m.group(1))));
+            }
+        }
+        if (plenarios.isEmpty()) return Collections.emptyList();
+
+        // 3. Largura do bloco = menor distância entre cabeçalhos consecutivos (2=antigo, 4=novo)
+        List<Integer> cols = new ArrayList<>(plenarios.keySet());
+        int largura = Integer.MAX_VALUE;
+        for (int i = 1; i < cols.size(); i++) {
+            largura = Math.min(largura, cols.get(i) - cols.get(i - 1));
+        }
+        if (largura == Integer.MAX_VALUE || largura < 2) largura = 2;  // 1 só plenário → assume antigo
+
+        // 4. Offsets dentro do bloco
+        int eventoOffset = largura >= 4 ? 2 : 1;     // descrição
+        int marcadorOffset = largura >= 4 ? 1 : -1;  // "Cessão" (só no layout novo)
+
+        List<Bloco> blocos = new ArrayList<>();
+        for (Map.Entry<Integer, String> e : plenarios.entrySet()) {
+            int s = e.getKey();
+            int colMarc = marcadorOffset >= 0 ? s + marcadorOffset : -1;
+            blocos.add(new Bloco(s, s + eventoOffset, colMarc, e.getValue()));
+        }
+
+        // 5. "Sala de Reuniões" (cabeçalho costuma ficar na 1ª linha, à direita dos plenários)
+        Integer colReuniao = acharSalaReunioes(rows, headerRow);
+        if (colReuniao != null) {
+            int s = colReuniao;
+            int colMarc = marcadorOffset >= 0 ? s + marcadorOffset : -1;
+            blocos.add(new Bloco(s, s + eventoOffset, colMarc, "Sala de Reuniões"));
+        }
+
+        log.debug("Layout cessões detectado: headerRow={}, largura={}, blocos={}",
+                headerRow, largura, blocos);
+        return blocos;
+    }
+
+    /** Conta quantas células de uma linha são cabeçalho "Plenário N". */
+    private int contarPlenarios(RowData row) {
+        if (row == null || row.getValues() == null) return 0;
+        int n = 0;
+        for (CellData c : row.getValues()) {
+            if (PLENARIO_HEADER.matcher(valor(c)).find()) n++;
+        }
+        return n;
+    }
+
+    /** Procura a coluna do cabeçalho "Sala de Reuniões" nas linhas 0..ateLinha (inclusive). */
+    private Integer acharSalaReunioes(List<RowData> rows, int ateLinha) {
+        for (int i = 0; i <= ateLinha && i < rows.size(); i++) {
+            RowData row = rows.get(i);
+            if (row == null || row.getValues() == null) continue;
+            List<CellData> cells = row.getValues();
+            for (int ci = 0; ci < cells.size(); ci++) {
+                if (semAcento(valor(cells.get(ci))).startsWith("sala de reuni")) return ci;
+            }
+        }
+        return null;
+    }
+
+    /** Valor textual (trim) de uma célula, ou "" se vazia. */
+    private String valor(CellData cell) {
+        return cell != null && cell.getFormattedValue() != null
+                ? cell.getFormattedValue().trim() : "";
+    }
+
+    /** True se a célula contém o marcador textual "Cessão" (tolerante a acento/caixa). */
+    private boolean isMarcadorCessao(CellData cell) {
+        return semAcento(valor(cell)).contains("cessao");
+    }
+
+    /** Minúsculas sem diacríticos, para comparação tolerante a acentos. */
+    private static String semAcento(String s) {
+        if (s == null) return "";
+        return Normalizer.normalize(s, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "").toLowerCase();
     }
 
     /** Verifica se a cor de fundo da célula bate com alguma das cores-alvo. */
