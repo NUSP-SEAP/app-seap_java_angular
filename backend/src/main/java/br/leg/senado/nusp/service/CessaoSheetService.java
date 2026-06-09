@@ -331,14 +331,21 @@ public class CessaoSheetService {
             "(\\d{1,2})\\s+de\\s+(\\p{L}+)\\s+de\\s+(\\d{4})",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS);
 
-    /** Tenta extrair uma data de uma célula da coluna A (pode vir como Date, "DD/MM/YYYY", "DD/MM" ou texto). */
+    /** "DD/MM/YYYY" em qualquer posição (com ou sem prefixo, ex: "01/06/2026"). */
+    private static final Pattern DATA_DMY = Pattern.compile("(\\d{1,2})/(\\d{1,2})/(\\d{4})");
+    /** "DD/MM" sem ano, possivelmente com prefixo de dia da semana (ex: "seg, 1/6"). O
+     *  lookbehind/lookahead evitam casar o trecho "DD/MM" de uma data "DD/MM/AAAA". */
+    private static final Pattern DATA_DM = Pattern.compile("(?<!\\d/)(\\d{1,2})/(\\d{1,2})(?!/\\d)");
+
+    /** Tenta extrair uma data de uma célula da coluna A. Formatos aceitos:
+     *  "DD/MM/YYYY", "DD/MM", "seg, 1/6" (dia da semana + DD/MM) e "quarta-feira, 1 de abril de 2026". */
     private LocalDate parseDataCelula(CellData cell) {
         if (cell == null || cell.getFormattedValue() == null) return null;
         String txt = cell.getFormattedValue().trim();
         if (txt.isEmpty()) return null;
 
-        // Formato "DD/MM/YYYY"
-        Matcher m1 = Pattern.compile("^(\\d{1,2})/(\\d{1,2})/(\\d{4})").matcher(txt);
+        // Formato "DD/MM/YYYY" (com ou sem prefixo)
+        Matcher m1 = DATA_DMY.matcher(txt);
         if (m1.find()) {
             try {
                 return LocalDate.of(Integer.parseInt(m1.group(3)),
@@ -346,8 +353,8 @@ public class CessaoSheetService {
             } catch (Exception ignore) {}
         }
 
-        // Formato "DD/MM" — usa o ano corrente
-        Matcher m2 = Pattern.compile("^(\\d{1,2})/(\\d{1,2})$").matcher(txt);
+        // Formato "DD/MM" sem ano (ex: "seg, 1/6") — usa o ano corrente
+        Matcher m2 = DATA_DM.matcher(txt);
         if (m2.find()) {
             try {
                 return LocalDate.of(LocalDate.now().getYear(),
