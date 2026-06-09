@@ -64,6 +64,10 @@ app:
     url: ${METABASE_URL:https://bi.senado-nusp.cloud}
     embedding-secret-key: ${METABASE_EMBEDDING_SECRET_KEY:}
     embed-ttl-sec: ${METABASE_EMBED_TTL_SEC:600}
+  alerts:
+    sync-to: ${ALERTS_SYNC_TO:}                       # destino(s) dos alertas (vírgula); vazio = desligado
+    sheet-stale-minutes: ${ALERTS_SHEET_STALE_MIN:30} # falha contínua por N min antes do 1º alerta
+    reminder-hours: ${ALERTS_REMINDER_HOURS:24}       # intervalo dos lembretes enquanto seguir falhando
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}

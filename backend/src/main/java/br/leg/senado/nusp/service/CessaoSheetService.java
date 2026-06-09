@@ -25,7 +25,11 @@ import java.io.FileInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.Normalizer;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,9 +69,16 @@ import java.util.stream.Collectors;
 public class CessaoSheetService {
 
     private final SalaRepository salaRepository;
+    private final AlertEmailService alertEmailService;
 
     @Value("${app.sheets.credentials-path}")
     private String credentialsPath;
+
+    @Value("${app.alerts.sheet-stale-minutes:30}")
+    private long sheetStaleMinutes;
+
+    @Value("${app.alerts.reminder-hours:24}")
+    private long reminderHours;
 
     @Value("${app.sheets.spreadsheet-id:}")
     private String spreadsheetId;
@@ -82,6 +93,13 @@ public class CessaoSheetService {
     private volatile List<Map<String, Object>> cacheCessoes = Collections.emptyList();
     private volatile String lastHash = "";
     private volatile boolean enabled = false;
+
+    // ── Monitoramento de saúde da sincronização (para alertas por e-mail) ─
+    private volatile Instant ultimoSucesso = null;   // última sincronização saudável
+    private volatile Instant inicioFalha = null;     // início da sequência de falhas atual
+    private volatile Instant ultimoAlerta = null;    // último e-mail enviado nesta falha
+    private volatile String motivoFalhaAtual = null; // descrição da falha atual
+    private volatile boolean emFalhaAlertada = false;// já enviou o alerta inicial desta falha
 
     // ── Cliente Sheets (lazy) ─────────────────────────────────────
     private volatile Sheets sheetsClient;
@@ -155,18 +173,32 @@ public class CessaoSheetService {
             initialDelayString = "10000")
     public void poll() {
         if (!enabled) return;
+        String motivoFalha = null;  // null = sincronização saudável
         try {
             carregarMapeamentoSeNecessario();
-            List<Map<String, Object>> novas = fetchCessoes(LocalDate.now());
-            String hash = String.valueOf(novas.hashCode());
+            FetchResult r = fetchCessoesDetalhado(LocalDate.now());
+
+            // Comportamento de cache inalterado: atualiza quando o resultado muda
+            String hash = String.valueOf(r.cessoes().hashCode());
             if (!hash.equals(lastHash)) {
-                cacheCessoes = novas;
+                cacheCessoes = r.cessoes();
                 lastHash = hash;
-                log.info("Cessões atualizadas: {} entradas hoje", novas.size());
+                log.info("Cessões atualizadas: {} entradas hoje", r.cessoes().size());
+            }
+
+            // Classificação de saúde (para alertas)
+            if (!r.abaEncontrada()) {
+                motivoFalha = "a aba do mês não foi encontrada na planilha";
+            } else if (!r.layoutOk()) {
+                motivoFalha = "o layout/colunas da planilha não foram reconhecidos";
+            } else if (r.datasParseadas() == 0) {
+                motivoFalha = "nenhuma data foi interpretada (o formato de data pode ter mudado)";
             }
         } catch (Exception e) {
             log.error("Erro ao atualizar cessões da planilha", e);
+            motivoFalha = "erro ao acessar a planilha (" + e.getClass().getSimpleName() + ")";
         }
+        monitorarSaude(motivoFalha);
     }
 
     // ══ API pública ═════════════════════════════════════════════
@@ -205,7 +237,21 @@ public class CessaoSheetService {
 
     // ══ Fetch — Sheets API ══════════════════════════════════════
 
+    /** Compatibilidade: retorna apenas a lista de cessões (usado por {@link #fetchCessoesParaData}). */
     private List<Map<String, Object>> fetchCessoes(LocalDate hoje) throws Exception {
+        return fetchCessoesDetalhado(hoje).cessoes();
+    }
+
+    /**
+     * Diagnóstico de uma leitura da planilha: cessões + sinais de saúde usados pelos alertas.
+     * @param abaEncontrada   a aba do mês existe na planilha
+     * @param layoutOk        os cabeçalhos "Plenário N" foram reconhecidos
+     * @param datasParseadas  quantas datas da coluna A foram interpretadas (0 = formato de data quebrou)
+     */
+    private record FetchResult(List<Map<String, Object>> cessoes, boolean abaEncontrada,
+                               boolean layoutOk, int datasParseadas) {}
+
+    private FetchResult fetchCessoesDetalhado(LocalDate hoje) throws Exception {
         String abaNome = nomeAbaParaMes(hoje);
 
         // Pede só os campos que precisamos: valor formatado + cor de fundo efetiva
@@ -217,27 +263,28 @@ public class CessaoSheetService {
         List<Sheet> sheets = resp.getSheets();
         if (sheets == null || sheets.isEmpty()) {
             log.warn("Aba '{}' não encontrada na planilha", abaNome);
-            return Collections.emptyList();
+            return new FetchResult(Collections.emptyList(), false, false, 0);
         }
         Sheet sheet = sheets.get(0);
         List<GridData> dataList = sheet.getData();
         if (dataList == null || dataList.isEmpty()) {
-            return Collections.emptyList();
+            return new FetchResult(Collections.emptyList(), true, false, 0);
         }
 
         List<RowData> rows = dataList.get(0).getRowData();
-        if (rows == null) return Collections.emptyList();
+        if (rows == null) return new FetchResult(Collections.emptyList(), true, false, 0);
 
         // Detecta o layout (antigo 2 col / novo 4 col) a partir do cabeçalho da aba
         List<Bloco> blocos = detectarLayout(rows);
         if (blocos.isEmpty()) {
             log.warn("Layout da aba '{}' não reconhecido (nenhum cabeçalho de plenário)", abaNome);
-            return Collections.emptyList();
+            return new FetchResult(Collections.emptyList(), true, false, 0);
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate dataAtual = null;
         int linhasNoBlocoAtual = 0;
+        int datasParseadas = 0;  // datas interpretadas na coluna A (sinal de saúde)
         // Cada dia ocupa exatamente 3 linhas na planilha (3 horários por dia).
         // Após esse limite, descartamos o forward-fill para não capturar
         // dados de seções "template" da planilha (ex: semana modelo no rodapé).
@@ -257,6 +304,7 @@ public class CessaoSheetService {
             if (dataDaLinha != null) {
                 dataAtual = dataDaLinha;
                 linhasNoBlocoAtual = 0;
+                datasParseadas++;
             } else if (dataAtual != null && ++linhasNoBlocoAtual >= MAX_LINHAS_POR_DIA) {
                 dataAtual = null;
                 continue;
@@ -301,7 +349,109 @@ public class CessaoSheetService {
             }
         }
 
-        return result;
+        return new FetchResult(result, true, true, datasParseadas);
+    }
+
+    // ══ Monitoramento de saúde + alertas por e-mail ═════════════
+
+    /**
+     * Atualiza o estado de saúde da sincronização e dispara e-mails:
+     * alerta inicial após {@code sheetStaleMinutes} de falha contínua, lembretes a cada
+     * {@code reminderHours}, e um e-mail de recuperação quando volta a sincronizar.
+     * Um único sucesso zera a contagem → timeouts passageiros não geram falso alarme.
+     *
+     * @param motivoFalha descrição da falha, ou {@code null} se a sincronização foi saudável
+     */
+    private void monitorarSaude(String motivoFalha) {
+        if (!alertEmailService.isEnabled()) return;  // alertas desligados
+        Instant agora = Instant.now();
+
+        if (motivoFalha == null) {
+            boolean recuperou = emFalhaAlertada;
+            Instant desde = inicioFalha;
+            ultimoSucesso = agora;
+            inicioFalha = null;
+            ultimoAlerta = null;
+            motivoFalhaAtual = null;
+            emFalhaAlertada = false;
+            if (recuperou) enviarRecuperacao(agora, desde);
+            return;
+        }
+
+        // Falha
+        if (inicioFalha == null) inicioFalha = agora;
+        motivoFalhaAtual = motivoFalha;
+        long minutosFalhando = Duration.between(inicioFalha, agora).toMinutes();
+        if (minutosFalhando < sheetStaleMinutes) return;  // ainda dentro da tolerância
+
+        if (!emFalhaAlertada) {
+            emFalhaAlertada = true;
+            ultimoAlerta = agora;
+            enviarAlerta(false);
+        } else if (ultimoAlerta == null
+                || Duration.between(ultimoAlerta, agora).toHours() >= reminderHours) {
+            ultimoAlerta = agora;
+            enviarAlerta(true);
+        }
+    }
+
+    private void enviarAlerta(boolean lembrete) {
+        String tipo = lembrete ? "LEMBRETE" : "ALERTA";
+        String desde = inicioFalha != null ? formatarInstante(inicioFalha) : "agora";
+        String ultimo = ultimoSucesso != null ? formatarInstante(ultimoSucesso)
+                : "(nenhuma desde o início do monitoramento)";
+        String html = """
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+                  <div style="background:#b00020;padding:16px;text-align:center">
+                    <h2 style="color:#ffffff;margin:0">NUSP — Agenda Legislativa</h2>
+                  </div>
+                  <div style="padding:24px;background:#f9f9f9;color:#333">
+                    <p><strong>%s:</strong> o sistema está há um tempo sem conseguir ler a
+                       planilha de cessões de sala.</p>
+                    <ul>
+                      <li><strong>Motivo:</strong> %s</li>
+                      <li><strong>Falhando desde:</strong> %s</li>
+                      <li><strong>Última sincronização bem-sucedida:</strong> %s</li>
+                    </ul>
+                    <p>Enquanto isso, a Agenda pode estar sem as cessões de sala. O que verificar:</p>
+                    <ul>
+                      <li>A planilha do Google está acessível e a aba do mês existe?</li>
+                      <li>O formato das colunas ou das datas mudou?</li>
+                      <li>A credencial de acesso à planilha continua válida?</li>
+                    </ul>
+                    <p style="color:#999;font-size:12px">Você receberá um lembrete a cada %d h
+                       enquanto a falha persistir, e um aviso quando normalizar.</p>
+                  </div>
+                </div>
+                """.formatted(tipo, motivoFalhaAtual, desde, ultimo, reminderHours);
+        alertEmailService.enviarAlerta("⚠ Agenda: falha ao sincronizar a planilha de cessões", html);
+    }
+
+    private void enviarRecuperacao(Instant agora, Instant desde) {
+        String periodo = desde != null ? formatarInstante(desde) : "?";
+        String html = """
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+                  <div style="background:#009739;padding:16px;text-align:center">
+                    <h2 style="color:#ffffff;margin:0">NUSP — Agenda Legislativa</h2>
+                  </div>
+                  <div style="padding:24px;background:#f9f9f9;color:#333">
+                    <p><strong>Sincronização normalizada.</strong> A leitura da planilha de
+                       cessões voltou a funcionar.</p>
+                    <ul>
+                      <li><strong>Ficou falhando desde:</strong> %s</li>
+                      <li><strong>Normalizou em:</strong> %s</li>
+                    </ul>
+                  </div>
+                </div>
+                """.formatted(periodo, formatarInstante(agora));
+        alertEmailService.enviarAlerta("✓ Agenda: sincronização da planilha normalizada", html);
+    }
+
+    private static final DateTimeFormatter ALERT_FMT =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+
+    private String formatarInstante(Instant i) {
+        return i.atZone(ZoneId.of("America/Sao_Paulo")).format(ALERT_FMT) + " (BRT)";
     }
 
     // ══ Mapeamento sala_nome → sala_id ══════════════════════════
