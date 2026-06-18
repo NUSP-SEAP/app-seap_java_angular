@@ -202,10 +202,20 @@ interface EditItem {
         }
 
         @if (step() === 'aviso' && avisoPendente()) {
-          <p class="text-muted-sm">Há um aviso para o {{ salaNome }}</p>
-          <div class="aviso-box">
-            <p class="aviso-msg">{{ avisoPendente()!.mensagem }}</p>
-          </div>
+          @if (avisoPendente()!.mensagens.length === 1) {
+            <p class="text-muted-sm">Há um aviso para o {{ salaNome }}</p>
+            <div class="aviso-box">
+              <p class="aviso-msg">{{ avisoPendente()!.mensagens[0].texto }}</p>
+            </div>
+          } @else {
+            <p class="text-muted-sm">Há {{ avisoPendente()!.mensagens.length }} avisos para o {{ salaNome }}</p>
+            @for (m of avisoPendente()!.mensagens; track m.ordem) {
+              <div class="aviso-box">
+                <div class="aviso-header">Aviso nº {{ m.ordem }}</div>
+                <p class="aviso-msg">{{ m.texto }}</p>
+              </div>
+            }
+          }
           <label class="aviso-ciente">
             <input type="checkbox" [(ngModel)]="avisoCiente">
             Ciente
@@ -393,7 +403,7 @@ export class ChecklistWizardComponent implements OnInit {
 
   // ── Wizard (modo novo) ──
   step = signal<'setup' | 'aviso' | 'operadores' | 'wizard' | 'finish'>('setup');
-  avisoPendente = signal<{ id: string; numero: number; mensagem: string } | null>(null);
+  avisoPendente = signal<{ cadastro_id: string; manter_apos_ciencia: boolean; mensagens: { ordem: number; texto: string }[] } | null>(null);
   avisoCiente = false;
   dataOperacao = new Date().toISOString().split('T')[0];
   salaId = '';
@@ -742,7 +752,7 @@ export class ChecklistWizardComponent implements OnInit {
   confirmarCiencia(): void {
     const a = this.avisoPendente();
     if (!a || !this.avisoCiente) return;
-    this.api.post(`/api/forms/checklist/aviso/${a.id}/ciencia`, {}).subscribe({
+    this.api.post(`/api/forms/checklist/aviso/${a.cadastro_id}/ciencia`, { sala_id: this.salaId }).subscribe({
       next: () => { this.avisoPendente.set(null); this.proceedAfterAviso(); },
       error: () => this.toast.error('Erro ao registrar ciência.'),
     });

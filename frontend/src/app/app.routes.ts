@@ -37,6 +37,7 @@ export const routes: Routes = [
         { path: 'agenda', title: 'Agenda Legislativa | Admin', loadComponent: () => import('./pages/admin/admin-agenda.component').then(m => m.AdminAgendaComponent) },
         { path: 'form-edit', title: 'Edição de Formulários | Admin', loadComponent: () => import('./pages/admin/admin-form-edit.component').then(m => m.AdminFormEditComponent) },
         { path: 'avisos-sala', title: 'Inserir Avisos | Admin', loadComponent: () => import('./pages/admin/admin-avisos-sala.component').then(m => m.AdminAvisosSalaComponent) },
+        { path: 'aviso/detalhe', title: 'Detalhe do Aviso | Admin', loadComponent: () => import('./pages/admin/admin-aviso-detalhe.component').then(m => m.AdminAvisoDetalheComponent) },
         { path: 'analise', title: 'Análise de Dados | Admin', loadComponent: () => import('./pages/admin/admin-analise.component').then(m => m.AdminAnaliseComponent) },
         { path: 'checklist/detalhe', title: 'Detalhe do Checklist | Admin', loadComponent: () => import('./pages/admin/checklist-detalhe.component').then(m => m.ChecklistDetalheComponent) },
         { path: 'operacao/detalhe', title: 'Detalhe da Operação | Admin', loadComponent: () => import('./pages/admin/operacao-detalhe.component').then(m => m.OperacaoDetalheComponent) },

@@ -29,3 +29,7 @@ databaseChangeLog:
       file: db/changelog/014-metabase-dashboards.yaml
   - include:
       file: db/changelog/015-metabase-dashboards-seed.yaml
+  - include:
+      file: db/changelog/016-aviso-novo-modelo.yaml
+  - include:
+      file: db/changelog/017-aviso-ciencia-por-sala.yaml
