@@ -47,6 +47,10 @@ interface TableState extends ListParams {
         <strong>Agenda Legislativa</strong>
         <span class="text-muted-sm">Abrir</span>
       </a>
+      <a routerLink="/ponto" class="card-custom card-link">
+        <strong>Ponto e Banco</strong>
+        <span class="text-muted-sm">Abrir</span>
+      </a>
       @if (auth.isAdmin()) {
         <a routerLink="/admin" class="card-custom card-link card-admin">
           <strong>Painel Administrativo</strong>

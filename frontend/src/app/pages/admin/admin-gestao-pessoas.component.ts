@@ -24,6 +24,7 @@ interface TableState extends ListParams {
       <a routerLink="/admin/novo-operador" class="card-custom card-link">Cadastro de Operador</a>
       <a routerLink="/admin/novo-tecnico" class="card-custom card-link">Cadastro de Técnico</a>
       <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
+      <a routerLink="/admin/ponto" class="card-custom card-link">Ponto e Banco</a>
     </div>
 
     <!-- ═══ Operadores ═══ -->

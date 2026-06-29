@@ -32,6 +32,10 @@ spring:
     default-schema: NUSP
   jackson:
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:25MB}      # cartão-ponto (PDF multi-página)
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:30MB}
 
 app:
   env:

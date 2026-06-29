@@ -10,6 +10,10 @@ import { AuthService } from '../../core/services/auth.service';
     <h1>Página Principal — Técnicos</h1>
 
     <div class="grid-cards">
+      <a routerLink="/ponto" class="card-custom card-link">
+        <strong>Ponto e Banco</strong>
+        <span class="text-muted-sm">Abrir</span>
+      </a>
       <a routerLink="/tecnico/agenda" class="card-custom card-link">
         <strong>Agenda Legislativa</strong>
         <span class="text-muted-sm">Abrir</span>

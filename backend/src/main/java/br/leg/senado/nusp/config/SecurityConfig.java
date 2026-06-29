@@ -35,6 +35,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/html-guard").permitAll()
                 .requestMatchers("/api/forms/checklist/itens-tipo").permitAll()
                 .requestMatchers("/api/password/**").permitAll()
+                // Folhas de ponto NÃO são servidas pelo handler estático público:
+                // o acesso é só via /api/ponto/** (com checagem de dono) e preview admin.
+                .requestMatchers("/files/ponto/**").denyAll()
                 .requestMatchers("/files/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 // Admin

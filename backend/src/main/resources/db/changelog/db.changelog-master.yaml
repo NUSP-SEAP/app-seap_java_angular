@@ -34,6 +34,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/017-aviso-ciencia-por-sala.yaml
   - include:
+      file: db/changelog/018-ponto-banco.yaml
+  - include:
+      file: db/changelog/019-ponto-admin-vinculo.yaml
+  - include:
       file: db/changelog/020-views-publicas-pessoas.yaml
   - include:
       file: db/changelog/021-aviso-destinatario-admin.yaml

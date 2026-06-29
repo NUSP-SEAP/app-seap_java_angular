@@ -26,6 +26,11 @@ export const routes: Routes = [
       { path: 'tecnico', canActivate: [roleGuard], data: { roles: ['tecnico'] }, title: 'Home | Técnicos', loadComponent: () => import('./pages/tecnico/tecnico-home.component').then(m => m.TecnicoHomeComponent) },
       { path: 'tecnico/agenda', canActivate: [roleGuard], data: { roles: ['tecnico'] }, title: 'Agenda Legislativa | Técnicos', loadComponent: () => import('./pages/tecnico/tecnico-agenda.component').then(m => m.TecnicoAgendaComponent) },
 
+      // ── Ponto e Banco (compartilhado operador + técnico) ──
+      { path: 'ponto', canActivate: [roleGuard], data: { roles: ['operador', 'tecnico'] }, title: 'Ponto e Banco | Senado NUSP', loadComponent: () => import('./shared/components/ponto-banco.component').then(m => m.PontoBancoComponent) },
+      // ── Retificação de folha (operador + técnico + admin terceirizado) ──
+      { path: 'ponto/retificar/:paginaId', canActivate: [roleGuard], data: { roles: ['operador', 'tecnico', 'administrador'] }, title: 'Retificar Ponto | Senado NUSP', loadComponent: () => import('./shared/components/ponto-retificar.component').then(m => m.PontoRetificarComponent) },
+
       // ── Admin ──
       { path: 'admin', canActivate: [roleGuard], data: { roles: ['administrador'] }, children: [
         { path: '', title: 'Admin | Senado NUSP', loadComponent: () => import('./pages/admin/admin-dashboard.component').then(m => m.AdminDashboardComponent) },
@@ -41,6 +46,7 @@ export const routes: Routes = [
         { path: 'avisos-sala', title: 'Inserir Avisos | Admin', loadComponent: () => import('./pages/admin/admin-avisos-sala.component').then(m => m.AdminAvisosSalaComponent) },
         { path: 'aviso/detalhe', title: 'Detalhe do Aviso | Admin', loadComponent: () => import('./pages/admin/admin-aviso-detalhe.component').then(m => m.AdminAvisoDetalheComponent) },
         { path: 'analise', title: 'Análise de Dados | Admin', loadComponent: () => import('./pages/admin/admin-analise.component').then(m => m.AdminAnaliseComponent) },
+        { path: 'ponto', title: 'Ponto e Banco | Admin', loadComponent: () => import('./pages/admin/admin-ponto.component').then(m => m.AdminPontoComponent) },
         { path: 'checklist/detalhe', title: 'Detalhe do Checklist | Admin', loadComponent: () => import('./pages/admin/checklist-detalhe.component').then(m => m.ChecklistDetalheComponent) },
         { path: 'operacao/detalhe', title: 'Detalhe da Operação | Admin', loadComponent: () => import('./pages/admin/operacao-detalhe.component').then(m => m.OperacaoDetalheComponent) },
         { path: 'anormalidade/detalhe', title: 'Detalhe da Anormalidade | Admin', loadComponent: () => import('./pages/admin/anormalidade-detalhe.component').then(m => m.AnormalidadeDetalheComponent) },
