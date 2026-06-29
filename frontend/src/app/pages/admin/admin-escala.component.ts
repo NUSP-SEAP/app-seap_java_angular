@@ -14,7 +14,7 @@ import { PaginationMeta } from '../../core/models/user.model';
   imports: [FormsModule, RouterLink, FmtDatePipe, PaginationComponent],
   template: `
     <h1>Escala Semanal</h1>
-    <a routerLink="/admin/operacao-audio" class="back-link">&larr; Voltar</a>
+    <a routerLink="/admin/gestao-pessoas" class="back-link">&larr; Voltar</a>
 
     <!-- ═══ ESCALAS EXISTENTES ═══ -->
     <section class="escalas-section">

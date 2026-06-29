@@ -41,7 +41,7 @@ import { ApiService } from '../../core/services/api.service';
         @if (errorMsg()) { <div class="error-box">{{ errorMsg() }}</div> }
 
         <div style="display:flex; justify-content:space-between; margin-top:20px">
-          <a routerLink="/admin/operacao-audio" class="btn-secondary-custom">← Voltar</a>
+          <a routerLink="/admin/gestao-pessoas" class="btn-secondary-custom">← Voltar</a>
           <button type="submit" class="btn-primary-custom" [disabled]="saving()">
             {{ saving() ? 'Salvando...' : 'Salvar' }}
           </button>
@@ -96,7 +96,7 @@ export class AdminNovoOperadorComponent {
     this.api.postForm<any>('/api/admin/operadores/novo', fd).subscribe({
       next: res => {
         this.saving.set(false);
-        if (res.ok) { alert('Operador cadastrado com sucesso!'); this.router.navigate(['/admin']); }
+        if (res.ok) { alert('Operador cadastrado com sucesso!'); this.router.navigate(['/admin/gestao-pessoas']); }
         else this.errorMsg.set(res.message || res.error || 'Erro ao cadastrar.');
       },
       error: err => {
