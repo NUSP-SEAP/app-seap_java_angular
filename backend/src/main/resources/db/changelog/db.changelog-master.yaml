@@ -33,3 +33,5 @@ databaseChangeLog:
       file: db/changelog/016-aviso-novo-modelo.yaml
   - include:
       file: db/changelog/017-aviso-ciencia-por-sala.yaml
+  - include:
+      file: db/changelog/020-views-publicas-pessoas.yaml
