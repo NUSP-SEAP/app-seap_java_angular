@@ -12,5 +12,12 @@ public interface AvisoCienciaRepository extends JpaRepository<AvisoCiencia, Stri
 
     Optional<AvisoCiencia> findByCadastroIdAndSalaIdAndTecnicoId(String cadastroId, Integer salaId, String tecnicoId);
 
+    // Avisos sem sala (ex.: PESSOAL): a ciência é por (cadastro, pessoa).
+    Optional<AvisoCiencia> findByCadastroIdAndOperadorId(String cadastroId, String operadorId);
+
+    Optional<AvisoCiencia> findByCadastroIdAndTecnicoId(String cadastroId, String tecnicoId);
+
+    Optional<AvisoCiencia> findByCadastroIdAndAdminId(String cadastroId, String adminId);
+
     List<AvisoCiencia> findByCadastroIdOrderByCienteEm(String cadastroId);
 }

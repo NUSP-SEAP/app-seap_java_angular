@@ -7,8 +7,8 @@ import lombok.Setter;
 
 /**
  * FRM_AVISO_ALVO — público de um cadastro de aviso. Cada linha é um destino:
- * uma sala, um operador, um técnico, ou um coletivo (TODOS_*). Apenas a FK
- * coerente com ALVO_TIPO é preenchida (CHECK no banco).
+ * uma sala, um operador, um técnico, um administrador, ou um coletivo (TODOS_*).
+ * Apenas a FK coerente com ALVO_TIPO é preenchida (CHECK no banco).
  */
 @Entity
 @Table(name = "FRM_AVISO_ALVO")
@@ -33,4 +33,7 @@ public class AvisoAlvo extends AuditableEntity {
 
     @Column(name = "TECNICO_ID")
     private String tecnicoId;
+
+    @Column(name = "ADMIN_ID")
+    private String adminId;
 }

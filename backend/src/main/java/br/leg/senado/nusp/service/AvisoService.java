@@ -21,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Serviço único de avisos. Genérico para todos os tipos (VERIFICACAO, ESCALA,
@@ -102,13 +104,10 @@ public class AvisoService {
                 new ServiceValidationException("Administrador inválido.", HttpStatus.NOT_FOUND));
 
         LocalDateTime agora = LocalDateTime.now();
-        Number numero = (Number) entityManager
-                .createNativeQuery("SELECT SEQ_FRM_AVISO_CADASTRO.NEXTVAL FROM DUAL")
-                .getSingleResult();
 
         // ── Cadastro ──
         AvisoCadastro cad = new AvisoCadastro();
-        cad.setNumero(numero.longValue());
+        cad.setNumero(proximoNumeroCadastro());
         cad.setTipo(tipo);
         cad.setPermanente(permanente);
         cad.setDuracaoDias(duracao);
@@ -147,6 +146,64 @@ public class AvisoService {
         cad.setDesativadoEm(LocalDateTime.now());
         cadastroRepo.save(cad);
         log.info("Aviso cadastro #{} desativado", cad.getNumero());
+    }
+
+    // ═══ Criação programática (ex.: publicação de folha de ponto) ═══
+
+    /** Destinatário individual de um aviso (pessoa + papel). */
+    public record DestinatarioAviso(String pessoaId, PapelPessoa papel) {}
+
+    /**
+     * Cria um aviso PESSOAL (permanente, some após a ciência) com uma única
+     * mensagem e um alvo individual por destinatário (operador/técnico/admin).
+     * Usado pela publicação de folha de ponto. Os IDs vêm de vínculo interno
+     * confiável (integridade garantida pelas FKs), por isso não revalida cada
+     * pessoa como o cadastro do form admin. Sem destinatários válidos, é no-op.
+     */
+    @Transactional
+    public void criarPessoalIndividual(List<DestinatarioAviso> destinatarios, String mensagem, String criadoPorId) {
+        if (mensagem == null || mensagem.isBlank())
+            throw new ServiceValidationException("Mensagem do aviso é obrigatória.");
+        adminRepo.findById(criadoPorId).orElseThrow(() ->
+                new ServiceValidationException("Administrador inválido.", HttpStatus.NOT_FOUND));
+
+        // Dedup por (papel, pessoa); ignora entradas incompletas.
+        List<DestinatarioAviso> validos = new ArrayList<>();
+        Set<String> vistos = new HashSet<>();
+        for (DestinatarioAviso d : (destinatarios == null ? List.<DestinatarioAviso>of() : destinatarios)) {
+            if (d == null || d.pessoaId() == null || d.papel() == null) continue;
+            if (vistos.add(d.papel() + ":" + d.pessoaId())) validos.add(d);
+        }
+        if (validos.isEmpty()) return;
+
+        AvisoCadastro cad = new AvisoCadastro();
+        cad.setNumero(proximoNumeroCadastro());
+        cad.setTipo(TipoAviso.PESSOAL);
+        cad.setPermanente(true);          // sem prazo
+        cad.setManterAposCiencia(false);  // some quando a pessoa marca ciência
+        cad.setStatus(StatusAviso.ATIVO);
+        cad.setCriadoPorId(criadoPorId);
+        cad = cadastroRepo.save(cad);
+
+        AvisoMensagem m = new AvisoMensagem();
+        m.setCadastroId(cad.getId());
+        m.setOrdem(1);
+        m.setTexto(mensagem.trim());
+        mensagemRepo.save(m);
+
+        List<AvisoAlvo> alvos = new ArrayList<>();
+        for (DestinatarioAviso d : validos) {
+            AvisoAlvo a = new AvisoAlvo();
+            a.setCadastroId(cad.getId());
+            switch (d.papel()) {
+                case OPERADOR -> { a.setAlvoTipo(AlvoTipoAviso.OPERADOR); a.setOperadorId(d.pessoaId()); }
+                case TECNICO  -> { a.setAlvoTipo(AlvoTipoAviso.TECNICO);  a.setTecnicoId(d.pessoaId()); }
+                case ADMIN    -> { a.setAlvoTipo(AlvoTipoAviso.ADMIN);    a.setAdminId(d.pessoaId()); }
+            }
+            alvos.add(a);
+        }
+        alvoRepo.saveAll(alvos);
+        log.info("Aviso PESSOAL #{} criado com {} destinatário(s) por {}", cad.getNumero(), alvos.size(), criadoPorId);
     }
 
     // ═══ Listagem (admin) ═══════════════════════════════════════
@@ -250,9 +307,50 @@ public class AvisoService {
             boolean manter = ((Number) r[1]).intValue() == 1;
             boolean jaCiente = temCiencia(cadastroId, salaId, pessoaId, papel);
             if (!manter && jaCiente) continue; // já marcou NESTA sala e não é pra manter → pula
-            return Optional.of(montarPayloadPendente(cadastroId, manter));
+            return Optional.of(montarPayloadPendente(cadastroId, manter, TipoAviso.VERIFICACAO));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Avisos pendentes (sem sala) para a pessoa logada, dentre os TIPOS pedidos
+     * (ex.: ESCALA/PESSOAL/GERAL em qualquer página; AGENDA nas telas de agenda).
+     * Considera os alvos individuais do papel e os coletivos correspondentes.
+     * Tipos que exigem ciência saem da lista quando a pessoa já deu ciência (e
+     * não é "manter após ciência"); tipos sem ciência (GERAL/AGENDA) são sempre
+     * retornados — o front os dispensa por sessão. Do mais antigo ao mais novo.
+     */
+    @Transactional
+    public List<Map<String, Object>> buscarPendentes(String pessoaId, PapelPessoa papel, List<TipoAviso> tipos) {
+        if (tipos == null || tipos.isEmpty()) return List.of();
+        String condAlvo = switch (papel) {
+            case OPERADOR -> "(al.ALVO_TIPO = 'OPERADOR' AND al.OPERADOR_ID = ?) OR al.ALVO_TIPO IN ('TODOS_OPERADORES','TODOS')";
+            case TECNICO  -> "(al.ALVO_TIPO = 'TECNICO' AND al.TECNICO_ID = ?) OR al.ALVO_TIPO IN ('TODOS_TECNICOS','TODOS')";
+            case ADMIN    -> "(al.ALVO_TIPO = 'ADMIN' AND al.ADMIN_ID = ?) OR al.ALVO_TIPO = 'TODOS_ADMIN'";
+        };
+        // Valores do enum (controlados) → seguro montar o IN diretamente.
+        String inTipos = String.join(",", tipos.stream().map(t -> "'" + t.name() + "'").toList());
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery(
+                "SELECT c.ID, c.MANTER_APOS_CIENCIA, c.TIPO " +
+                "  FROM FRM_AVISO_CADASTRO c " +
+                " WHERE c.TIPO IN (" + inTipos + ") " +
+                "   AND c.STATUS = 'Ativo' " +
+                "   AND (c.PERMANENTE = 1 OR c.EXPIRA_EM IS NULL OR c.EXPIRA_EM > SYSTIMESTAMP) " +
+                "   AND EXISTS (SELECT 1 FROM FRM_AVISO_ALVO al WHERE al.CADASTRO_ID = c.ID AND (" + condAlvo + ")) " +
+                " ORDER BY c.CRIADO_EM")
+                .setParameter(1, pessoaId).getResultList();
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            String cadastroId = (String) r[0];
+            boolean manter = ((Number) r[1]).intValue() == 1;
+            TipoAviso tipo = TipoAviso.fromString((String) r[2]);
+            // Tipos com ciência: se já ciente e não é "manter", já não está pendente.
+            if (tipo.exigeCiencia() && !manter && temCiencia(cadastroId, null, pessoaId, papel)) continue;
+            out.add(montarPayloadPendente(cadastroId, manter, tipo));
+        }
+        return out;
     }
 
     /**
@@ -266,8 +364,8 @@ public class AvisoService {
                 new ServiceValidationException("Aviso não encontrado.", HttpStatus.NOT_FOUND));
         if (cad.getTipo() == null || !cad.getTipo().exigeCiencia())
             throw new ServiceValidationException("Este tipo de aviso não registra ciência.");
-        // Tipos atuais que exigem ciência são por sala (VERIFICACAO); a sala é obrigatória.
-        if (salaId == null)
+        // Sala obrigatória só para tipos amarrados a sala (VERIFICACAO); PESSOAL não tem sala.
+        if (cad.getTipo().exigeSala() && salaId == null)
             throw new ServiceValidationException("Sala é obrigatória para registrar ciência.");
         // Aviso não mais ativo (expirou/desativou entre a exibição e o clique):
         // nada a registrar, mas não bloqueia o destinatário.
@@ -277,8 +375,11 @@ public class AvisoService {
         AvisoCiencia c = new AvisoCiencia();
         c.setCadastroId(cadastroId);
         c.setSalaId(salaId);
-        if (papel == PapelPessoa.OPERADOR) c.setOperadorId(pessoaId);
-        else c.setTecnicoId(pessoaId);
+        switch (papel) {
+            case OPERADOR -> c.setOperadorId(pessoaId);
+            case TECNICO  -> c.setTecnicoId(pessoaId);
+            case ADMIN    -> c.setAdminId(pessoaId);
+        }
         c.setCienteEm(LocalDateTime.now());
         try {
             cienciaWriter.inserir(c); // REQUIRES_NEW: isola eventual violação de unicidade em corrida
@@ -318,6 +419,14 @@ public class AvisoService {
         if (v == null || v.isBlank()) throw new ServiceValidationException("Tipo de público é obrigatório.");
         try { return AlvoTipoAviso.fromString(v); }
         catch (IllegalArgumentException e) { throw new ServiceValidationException("Tipo de público inválido."); }
+    }
+
+    /** Próximo "número humano" do cadastro (sequence Oracle). */
+    private long proximoNumeroCadastro() {
+        Number n = (Number) entityManager
+                .createNativeQuery("SELECT SEQ_FRM_AVISO_CADASTRO.NEXTVAL FROM DUAL")
+                .getSingleResult();
+        return n.longValue();
     }
 
     private void validarAlvo(AlvoTipoAviso alvoTipo, List<Integer> salaIds,
@@ -419,15 +528,24 @@ public class AvisoService {
         return alvos;
     }
 
+    /** Já existe ciência desta pessoa neste cadastro? Sem sala (salaId null) usa a chave (cadastro, pessoa). */
     private boolean temCiencia(String cadastroId, Integer salaId, String pessoaId, PapelPessoa papel) {
-        return papel == PapelPessoa.OPERADOR
-                ? cienciaRepo.findByCadastroIdAndSalaIdAndOperadorId(cadastroId, salaId, pessoaId).isPresent()
-                : cienciaRepo.findByCadastroIdAndSalaIdAndTecnicoId(cadastroId, salaId, pessoaId).isPresent();
+        return switch (papel) {
+            case OPERADOR -> (salaId == null
+                    ? cienciaRepo.findByCadastroIdAndOperadorId(cadastroId, pessoaId)
+                    : cienciaRepo.findByCadastroIdAndSalaIdAndOperadorId(cadastroId, salaId, pessoaId)).isPresent();
+            case TECNICO -> (salaId == null
+                    ? cienciaRepo.findByCadastroIdAndTecnicoId(cadastroId, pessoaId)
+                    : cienciaRepo.findByCadastroIdAndSalaIdAndTecnicoId(cadastroId, salaId, pessoaId)).isPresent();
+            case ADMIN -> cienciaRepo.findByCadastroIdAndAdminId(cadastroId, pessoaId).isPresent();
+        };
     }
 
-    private Map<String, Object> montarPayloadPendente(String cadastroId, boolean manter) {
+    private Map<String, Object> montarPayloadPendente(String cadastroId, boolean manter, TipoAviso tipo) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("cadastro_id", cadastroId);
+        m.put("tipo", tipo.name());
+        m.put("exige_ciencia", tipo.exigeCiencia());
         m.put("manter_apos_ciencia", manter);
         m.put("mensagens", mensagemRepo.findByCadastroIdOrderByOrdem(cadastroId).stream()
                 .map(this::mensagemToMap).toList());
@@ -448,8 +566,10 @@ public class AvisoService {
             case SALA -> salaRepo.findById(a.getSalaId()).map(s -> s.getNome()).orElse("Sala " + a.getSalaId());
             case OPERADOR -> operadorRepo.findById(a.getOperadorId()).map(o -> o.getNomeCompleto()).orElse(a.getOperadorId());
             case TECNICO -> tecnicoRepo.findById(a.getTecnicoId()).map(t -> t.getNomeCompleto()).orElse(a.getTecnicoId());
+            case ADMIN -> adminRepo.findById(a.getAdminId()).map(ad -> ad.getNomeCompleto()).orElse(a.getAdminId());
             case TODOS_OPERADORES -> "Todos os operadores";
             case TODOS_TECNICOS -> "Todos os técnicos";
+            case TODOS_ADMIN -> "Todos os administradores";
             case TODOS -> "Todos";
         };
         m.put("descricao", desc);
@@ -463,9 +583,12 @@ public class AvisoService {
         if (c.getOperadorId() != null) {
             papel = "Operador";
             nome = operadorRepo.findById(c.getOperadorId()).map(o -> o.getNomeCompleto()).orElse(c.getOperadorId());
-        } else {
+        } else if (c.getTecnicoId() != null) {
             papel = "Técnico";
             nome = tecnicoRepo.findById(c.getTecnicoId()).map(t -> t.getNomeCompleto()).orElse(c.getTecnicoId());
+        } else {
+            papel = "Administrador";
+            nome = adminRepo.findById(c.getAdminId()).map(a -> a.getNomeCompleto()).orElse(c.getAdminId());
         }
         m.put("nome", nome);
         m.put("papel", papel);

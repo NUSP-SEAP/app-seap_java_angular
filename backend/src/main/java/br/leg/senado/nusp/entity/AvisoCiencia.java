@@ -7,9 +7,9 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * FRM_AVISO_CIENCIA — ciência de um cadastro por um operador OU um técnico
- * (exclusivos, via CHECK). Substitui FRM_AVISO_SALA_CIENCIA. Vazia para
- * tipos que não exigem ciência.
+ * FRM_AVISO_CIENCIA — ciência de um cadastro por um operador, um técnico OU
+ * um administrador (exclusivos, via CHECK). Substitui FRM_AVISO_SALA_CIENCIA.
+ * Vazia para tipos que não exigem ciência.
  */
 @Entity
 @Table(name = "FRM_AVISO_CIENCIA")
@@ -32,6 +32,9 @@ public class AvisoCiencia extends AuditableEntity {
 
     @Column(name = "TECNICO_ID")
     private String tecnicoId;
+
+    @Column(name = "ADMIN_ID")
+    private String adminId;
 
     @Column(name = "CIENTE_EM", nullable = false)
     private LocalDateTime cienteEm;

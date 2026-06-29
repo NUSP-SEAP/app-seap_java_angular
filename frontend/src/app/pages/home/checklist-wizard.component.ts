@@ -324,14 +324,6 @@ interface EditItem {
     .wizard-info {
       background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dbeafe;
     }
-    .aviso-box {
-      background: #fff8db; border-left: 4px solid #f2c94c;
-      border-radius: 6px; padding: 14px 18px; margin: 14px 0;
-    }
-    .aviso-header { font-weight: 700; color: #7a5d00; font-size: .85rem; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
-    .aviso-msg { margin: 0; white-space: pre-wrap; color: var(--text); font-size: 1rem; line-height: 1.4; }
-    .aviso-ciente { display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 8px 0; }
-    .aviso-ciente input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
     .wizard-label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
     .wizard-sala { font-size: 1.2rem; font-weight: 600; color: var(--text); }
     .wizard-item-title { font-size: 1.1rem; margin-bottom: 16px; }

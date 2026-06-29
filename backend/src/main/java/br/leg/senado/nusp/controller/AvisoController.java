@@ -1,6 +1,7 @@
 package br.leg.senado.nusp.controller;
 
 import br.leg.senado.nusp.enums.PapelPessoa;
+import br.leg.senado.nusp.enums.TipoAviso;
 import br.leg.senado.nusp.security.UserPrincipal;
 import br.leg.senado.nusp.service.AvisoService;
 import br.leg.senado.nusp.service.DashboardQueryHelper.PagedResult;
@@ -120,6 +121,39 @@ public class AvisoController {
             @AuthenticationPrincipal UserPrincipal principal) {
         Integer salaId = body != null ? asInt(body.get("sala_id")) : null;
         avisoService.registrarCiencia(cadastroId, salaId, principal.getId(), PapelPessoa.OPERADOR);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    // ══ Pós-login (avisos pessoais) ═════════════════════════════
+
+    /**
+     * Avisos pendentes do usuário logado (qualquer papel), para exibir em qualquer página.
+     * contexto=geral → ESCALA/PESSOAL/GERAL; contexto=agenda → idem + AGENDA (telas de agenda).
+     */
+    @GetMapping("/api/avisos/pendentes")
+    public ResponseEntity<?> avisosPendentes(
+            @RequestParam(defaultValue = "geral") String contexto,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        PapelPessoa papel = PapelPessoa.fromRole(principal.getRole());
+        List<TipoAviso> tipos = "agenda".equalsIgnoreCase(contexto)
+                ? List.of(TipoAviso.ESCALA, TipoAviso.PESSOAL, TipoAviso.GERAL, TipoAviso.AGENDA)
+                : List.of(TipoAviso.ESCALA, TipoAviso.PESSOAL, TipoAviso.GERAL);
+        List<Map<String, Object>> data = papel == null ? List.of()
+                : avisoService.buscarPendentes(principal.getId(), papel, tipos);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ok", true);
+        body.put("data", data);
+        return ResponseEntity.ok(body);
+    }
+
+    /** Ciência de um aviso pessoal (sem sala) pelo usuário logado. */
+    @PostMapping("/api/avisos/{cadastroId}/ciencia")
+    public ResponseEntity<?> registrarCienciaPessoal(
+            @PathVariable("cadastroId") String cadastroId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        PapelPessoa papel = PapelPessoa.fromRole(principal.getRole());
+        if (papel != null)
+            avisoService.registrarCiencia(cadastroId, null, principal.getId(), papel);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 

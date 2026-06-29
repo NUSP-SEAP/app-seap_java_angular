@@ -25,6 +25,11 @@ public enum TipoAviso {
         return this == VERIFICACAO || this == ESCALA || this == PESSOAL;
     }
 
+    /** Tipos amarrados a uma sala (a ciência é por sala). Hoje só VERIFICACAO. */
+    public boolean exigeSala() {
+        return this == VERIFICACAO;
+    }
+
     @JsonCreator
     public static TipoAviso fromString(String v) {
         if (v == null || v.isBlank()) throw new IllegalArgumentException("Tipo de aviso obrigatório.");

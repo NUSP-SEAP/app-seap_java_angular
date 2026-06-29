@@ -10,13 +10,15 @@ public enum AlvoTipoAviso {
     SALA,
     OPERADOR,
     TECNICO,
+    ADMIN,
     TODOS_OPERADORES,
     TODOS_TECNICOS,
+    TODOS_ADMIN,
     TODOS;
 
     /** Alvos sem destinatário individual (não preenchem FK). */
     public boolean ehColetivo() {
-        return this == TODOS_OPERADORES || this == TODOS_TECNICOS || this == TODOS;
+        return this == TODOS_OPERADORES || this == TODOS_TECNICOS || this == TODOS_ADMIN || this == TODOS;
     }
 
     public boolean atingeOperadores() {
@@ -25,6 +27,11 @@ public enum AlvoTipoAviso {
 
     public boolean atingeTecnicos() {
         return this == SALA || this == TECNICO || this == TODOS_TECNICOS || this == TODOS;
+    }
+
+    /** Administradores como público. TODOS (operadores+técnicos) NÃO inclui admin — use ADMIN/TODOS_ADMIN. */
+    public boolean atingeAdmins() {
+        return this == ADMIN || this == TODOS_ADMIN;
     }
 
     @JsonCreator
