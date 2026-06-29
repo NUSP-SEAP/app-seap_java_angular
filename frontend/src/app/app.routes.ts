@@ -24,6 +24,7 @@ export const routes: Routes = [
 
       // ── Técnico ──
       { path: 'tecnico', canActivate: [roleGuard], data: { roles: ['tecnico'] }, title: 'Home | Técnicos', loadComponent: () => import('./pages/tecnico/tecnico-home.component').then(m => m.TecnicoHomeComponent) },
+      { path: 'tecnico/agenda', canActivate: [roleGuard], data: { roles: ['tecnico'] }, title: 'Agenda Legislativa | Técnicos', loadComponent: () => import('./pages/tecnico/tecnico-agenda.component').then(m => m.TecnicoAgendaComponent) },
 
       // ── Admin ──
       { path: 'admin', canActivate: [roleGuard], data: { roles: ['administrador'] }, children: [
