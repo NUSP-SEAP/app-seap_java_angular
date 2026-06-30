@@ -29,6 +29,18 @@ public class Administrador extends AuditableEntity {
     @Column(name = "SENHA_PROVISORIA", nullable = false)
     private Boolean senhaProvisoria = false;
 
+    /** Carga horária semanal: 30 ou 40 (NULL = não definida) */
+    @Column(name = "CARGA_HORARIA")
+    private Integer cargaHoraria;
+
+    /** Início do horário de trabalho, formato 'HH:MM' (NULL = não definido) */
+    @Column(name = "HORARIO_TRABALHO_INICIO", length = 5)
+    private String horarioTrabalhoInicio;
+
+    /** Fim do horário de trabalho, formato 'HH:MM' (NULL = não definido) */
+    @Column(name = "HORARIO_TRABALHO_FIM", length = 5)
+    private String horarioTrabalhoFim;
+
     /** Substitui extensão citext — armazena sempre em lowercase */
     public void setEmail(String email) {
         this.email = email != null ? email.toLowerCase() : null;

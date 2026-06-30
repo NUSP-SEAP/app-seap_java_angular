@@ -41,3 +41,5 @@ databaseChangeLog:
       file: db/changelog/020-views-publicas-pessoas.yaml
   - include:
       file: db/changelog/021-aviso-destinatario-admin.yaml
+  - include:
+      file: db/changelog/022-pessoa-carga-horario.yaml

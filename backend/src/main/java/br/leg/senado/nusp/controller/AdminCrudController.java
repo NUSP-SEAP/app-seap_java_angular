@@ -136,6 +136,39 @@ public class AdminCrudController {
         return ResponseEntity.ok(Map.of("ok", true, "participa_escala", novoValor));
     }
 
+    // ══ Perfil de Operador — Buscar ════════════════════════════
+
+    @GetMapping("/operador/{id}")
+    public ResponseEntity<?> operadorPerfil(@PathVariable String id) {
+        Map<String, Object> operador = crudService.getOperadorPerfil(id);
+        return ResponseEntity.ok(Map.of("ok", true, "operador", operador));
+    }
+
+    // ══ Perfil de Operador — Atualizar (multipart: foto opcional) ═
+
+    @PostMapping("/operador/{id}/atualizar")
+    public ResponseEntity<?> operadorAtualizar(
+            @PathVariable String id,
+            @RequestParam(value = "nome_completo", required = false) String nomeCompleto,
+            @RequestParam(value = "nome_exibicao", required = false) String nomeExibicao,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "turno", required = false, defaultValue = "M") String turno,
+            @RequestParam(value = "carga_horaria", required = false) String cargaHoraria,
+            @RequestParam(value = "horario_trabalho_inicio", required = false) String horarioInicio,
+            @RequestParam(value = "horario_trabalho_fim", required = false) String horarioFim,
+            @RequestParam(value = "plenario_principal", required = false, defaultValue = "false") boolean plenarioPrincipal,
+            @RequestParam(value = "plenario_principal_fixo", required = false, defaultValue = "false") boolean plenarioPrincipalFixo,
+            @RequestParam(value = "participa_escala", required = false, defaultValue = "false") boolean participaEscala,
+            @RequestParam(value = "foto", required = false) MultipartFile foto) {
+
+        Map<String, Object> operador = crudService.atualizarOperador(
+                id, nomeCompleto, nomeExibicao, email, turno, cargaHoraria,
+                horarioInicio, horarioFim, plenarioPrincipal, plenarioPrincipalFixo,
+                participaEscala, foto);
+
+        return ResponseEntity.ok(Map.of("ok", true, "operador", operador));
+    }
+
     // ══ Form Edit — Listar ══════════════════════════════════════
 
     @GetMapping("/form-edit/{entidade}/list")

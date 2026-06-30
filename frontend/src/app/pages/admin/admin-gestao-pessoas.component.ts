@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService, ListParams } from '../../core/services/api.service';
 import { PaginationMeta } from '../../core/models/user.model';
@@ -23,6 +23,7 @@ interface TableState extends ListParams {
     <div class="grid-cards">
       <a routerLink="/admin/novo-operador" class="card-custom card-link">Cadastro de Operador</a>
       <a routerLink="/admin/novo-tecnico" class="card-custom card-link">Cadastro de Técnico</a>
+      <a routerLink="/admin/avisos-sala" class="card-custom card-link">Inserir Avisos</a>
       <a routerLink="/admin/escala" class="card-custom card-link">Escala Semanal</a>
       <a routerLink="/admin/ponto" class="card-custom card-link">Ponto e Banco</a>
     </div>
@@ -52,40 +53,17 @@ interface TableState extends ListParams {
                 [currentSort]="opState.sort" [currentDir]="opState.direction"
                 (sortChange)="onOpSort($event)" (filterChange)="onOpFilter($event)" />
             </th>
-            <th style="width:130px">Turno</th>
-            <th style="width:90px" title="Apto a operar no Plenário Principal">Apto PP</th>
-            <th style="width:90px" title="Operador fixo do Plenário Principal">Fixo PP</th>
-            <th style="width:80px">Escala</th>
+            <th style="width:110px">Ação</th>
           </tr></thead>
           <tbody>
             @if (opRows().length === 0) {
-              <tr><td colspan="6" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
+              <tr><td colspan="3" class="empty-state">{{ opLoading() ? 'Carregando...' : 'Nenhum operador encontrado.' }}</td></tr>
             } @else {
               @for (op of opRows(); track op['id']) {
                 <tr>
                   <td><strong>{{ op['nome_completo'] || op['nome'] }}</strong></td>
                   <td>{{ op['email'] }}</td>
-                  <td class="turno-cell" style="text-align:center">
-                    <select [value]="op['turno'] || 'M'" (change)="setTurno(op, $any($event.target).value)" class="turno-select">
-                      <option value="M">Matutino</option>
-                      <option value="V">Vespertino</option>
-                    </select>
-                  </td>
-                  <td style="text-align:center">
-                    <input type="checkbox" [checked]="op['plenario_principal'] === true || op['plenario_principal'] === 1"
-                      (change)="togglePlenario(op)" style="cursor:pointer; width:18px; height:18px">
-                  </td>
-                  <td style="text-align:center">
-                    <input type="checkbox"
-                      [checked]="op['plenario_principal_fixo'] === true || op['plenario_principal_fixo'] === 1"
-                      [disabled]="!(op['plenario_principal'] === true || op['plenario_principal'] === 1)"
-                      (change)="togglePlenarioFixo(op)"
-                      style="cursor:pointer; width:18px; height:18px">
-                  </td>
-                  <td style="text-align:center">
-                    <input type="checkbox" [checked]="op['participa_escala'] === true || op['participa_escala'] === 1"
-                      (change)="toggleEscala(op)" style="cursor:pointer; width:18px; height:18px">
-                  </td>
+                  <td><button class="btn-xs" (click)="abrirPerfil(op)">Perfil</button></td>
                 </tr>
               }
             }
@@ -137,25 +115,14 @@ interface TableState extends ListParams {
     </section>
   `,
   styles: [`
-    .grid-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px 0 28px; }
+    .grid-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0 28px; }
     .card-link { display:flex; align-items:center; padding:16px 20px; text-decoration:none; color:var(--text); font-weight:600; font-size:.95rem; transition:box-shadow .15s; cursor:pointer; &:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);} }
     section { margin-bottom:28px; }
-    .turno-cell { padding: 4px 16px !important; }
-    .turno-select {
-      appearance: none; -webkit-appearance: none; -moz-appearance: none;
-      box-sizing: border-box; display: inline-block;
-      padding: 0 18px 0 6px; height: 20px; line-height: 18px; min-height: 0;
-      border: 1px solid var(--border); border-radius: 6px;
-      background: var(--card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23475569'/></svg>") no-repeat right 6px center;
-      color: var(--text); font-size: .75rem; cursor: pointer;
-      vertical-align: middle;
-      &:hover { border-color: var(--primary); }
-      &:focus { outline: none; border-color: var(--primary); }
-    }
   `],
 })
 export class AdminGestaoPessoasComponent implements OnInit {
   private api = inject(ApiService);
+  private router = inject(Router);
   private debounceOp: any; private debounceTec: any;
 
   // ── Column definitions ──
@@ -180,70 +147,9 @@ export class AdminGestaoPessoasComponent implements OnInit {
   tecRows = signal<Record<string,unknown>[]>([]); tecMeta = signal<PaginationMeta|null>(null); tecLoading = signal(true);
   tecSearch = '';
 
-  // ── Toggle Plenário ──
-  togglePlenario(op: Record<string,unknown>): void {
-    const novoApto = !(op['plenario_principal'] === true || op['plenario_principal'] === 1);
-    op['plenario_principal'] = novoApto ? 1 : 0;
-    if (!novoApto) op['plenario_principal_fixo'] = 0;
-    this.opRows.set([...this.opRows()]);
-
-    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-plenario`, {}).subscribe({
-      next: (res: any) => {
-        if (res.ok) {
-          op['plenario_principal'] = res.plenario_principal ? 1 : 0;
-          if (!res.plenario_principal) op['plenario_principal_fixo'] = 0;
-          this.opRows.set([...this.opRows()]);
-        }
-      },
-      error: () => {
-        alert('Erro ao alterar flag de plenário.');
-        this.loadOperadores();
-      },
-    });
-  }
-
-  togglePlenarioFixo(op: Record<string,unknown>): void {
-    const novoFixo = !(op['plenario_principal_fixo'] === true || op['plenario_principal_fixo'] === 1);
-    op['plenario_principal_fixo'] = novoFixo ? 1 : 0;
-    this.opRows.set([...this.opRows()]);
-
-    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-plenario-fixo`, {}).subscribe({
-      next: (res: any) => {
-        if (res.ok) {
-          op['plenario_principal_fixo'] = res.plenario_principal_fixo ? 1 : 0;
-          this.opRows.set([...this.opRows()]);
-        }
-      },
-      error: (err: any) => {
-        const msg = err?.error?.message || 'Erro ao alterar flag de fixo do Plenário Principal.';
-        alert(msg);
-        this.loadOperadores();
-      },
-    });
-  }
-
-  toggleEscala(op: Record<string,unknown>): void {
-    this.api.patch<any>(`/api/admin/operador/${op['id']}/toggle-escala`, {}).subscribe({
-      next: (res: any) => {
-        if (res.ok) op['participa_escala'] = res.participa_escala ? 1 : 0;
-      },
-      error: () => {
-        alert('Erro ao alterar flag de escala.');
-        this.loadOperadores();
-      },
-    });
-  }
-
-  setTurno(op: Record<string,unknown>, turno: string): void {
-    this.api.patch<any>(`/api/admin/operador/${op['id']}/turno`, { turno }).subscribe({
-      next: (res: any) => {
-        if (res.ok) op['turno'] = res.turno;
-      },
-      error: () => {
-        alert('Erro ao alterar turno do operador.');
-        this.loadOperadores();
-      },
-    });
+  // ── Navegação para o Perfil do operador ──
+  abrirPerfil(op: Record<string,unknown>): void {
+    this.router.navigate(['/admin/operador/perfil'], { queryParams: { id: op['id'] } });
   }
 
   ngOnInit(): void { this.loadOperadores(); this.loadTecnicos(); }

@@ -121,6 +121,28 @@ public class AdminCrudService {
         return filesUrlPrefix.replaceAll("/$", "") + "/" + dirname + "/" + filename;
     }
 
+    /**
+     * Apaga o arquivo físico correspondente a uma fotoUrl (ex.: "/files/operadores/x.jpg").
+     * Best-effort: nunca lança — apenas loga em caso de erro. Protegido contra path traversal.
+     */
+    private void apagarFotoFisica(String fotoUrl) {
+        if (isBlank(fotoUrl)) return;
+        try {
+            String prefix = filesUrlPrefix.replaceAll("/$", "");
+            String rel = fotoUrl.startsWith(prefix) ? fotoUrl.substring(prefix.length()) : fotoUrl;
+            rel = rel.replaceFirst("^/+", "");
+            Path base = Paths.get(filesDir).toAbsolutePath().normalize();
+            Path alvo = base.resolve(rel).normalize();
+            if (!alvo.startsWith(base)) {
+                log.warn("Ignorando remoção de foto fora do diretório de arquivos: {}", fotoUrl);
+                return;
+            }
+            Files.deleteIfExists(alvo);
+        } catch (Exception e) {
+            log.warn("Não foi possível apagar a foto antiga ({}): {}", fotoUrl, e.getMessage());
+        }
+    }
+
     private String extractExtension(MultipartFile file) {
         String name = file.getOriginalFilename();
         if (name != null && name.contains(".")) {
@@ -581,7 +603,143 @@ public class AdminCrudService {
         operadorRepo.save(op);
     }
 
+    // ══ Perfil de Operador — Buscar ══════════════════════════════
+
+    public Map<String, Object> getOperadorPerfil(String id) {
+        Operador op = operadorRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+        return operadorToMap(op);
+    }
+
+    // ══ Perfil de Operador — Atualizar ═══════════════════════════
+
+    @Transactional
+    public Map<String, Object> atualizarOperador(
+            String id, String nomeCompleto, String nomeExibicao, String email, String turno,
+            String cargaHorariaRaw, String horarioInicio, String horarioFim,
+            boolean plenarioPrincipal, boolean plenarioPrincipalFixo, boolean participaEscala,
+            MultipartFile foto) {
+
+        Operador op = operadorRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Operador não encontrado.")));
+
+        List<String> faltantes = new ArrayList<>();
+        if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
+        if (isBlank(nomeExibicao)) faltantes.add("nome_exibicao");
+        if (isBlank(email))        faltantes.add("email");
+        if (!faltantes.isEmpty()) {
+            throw new ServiceValidationException("invalid_payload", HttpStatus.BAD_REQUEST,
+                    Map.of("missing", String.join(", ", faltantes)));
+        }
+
+        if (!"M".equals(turno) && !"V".equals(turno)) {
+            throw new ServiceValidationException("TURNO_INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Turno deve ser 'M' (Matutino) ou 'V' (Vespertino)."));
+        }
+
+        Integer cargaHoraria = parseCargaHoraria(cargaHorariaRaw);
+        String horaInicio = normalizarHora(horarioInicio);
+        String horaFim = normalizarHora(horarioFim);
+
+        // "Fixo do PP" só faz sentido se o operador estiver apto ao PP
+        if (plenarioPrincipalFixo && !plenarioPrincipal) {
+            throw new ServiceValidationException("INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Operador precisa estar apto a Plenário Principal antes de ser marcado como fixo."));
+        }
+
+        // E-mail: normaliza e, se mudou, valida conflito global (operador/admin/técnico)
+        String novoEmail = email.strip().toLowerCase();
+        if (!novoEmail.equals(op.getEmail())) {
+            verificarConflitoEmail(novoEmail, id);
+        }
+
+        // Foto: só substitui se uma nova for enviada. Salva a nova primeiro
+        // (se falhar, mantém a antiga) e só então apaga o arquivo anterior.
+        if (foto != null && !foto.isEmpty()) {
+            String urlAntiga = op.getFotoUrl();
+            op.setFotoUrl(salvarFoto(op.getUsername(), foto, operadoresDirname));
+            apagarFotoFisica(urlAntiga);
+        }
+
+        op.setNomeCompleto(nomeCompleto.strip());
+        op.setNomeExibicao(nomeExibicao.strip());
+        op.setEmail(novoEmail);
+        op.setTurno(turno);
+        op.setCargaHoraria(cargaHoraria);
+        op.setHorarioTrabalhoInicio(horaInicio);
+        op.setHorarioTrabalhoFim(horaFim);
+        op.setPlenarioPrincipal(plenarioPrincipal);
+        op.setPlenarioPrincipalFixo(plenarioPrincipal && plenarioPrincipalFixo);
+        op.setParticipaEscala(participaEscala);
+        op = operadorRepo.save(op);
+
+        return operadorToMap(op);
+    }
+
+    private Map<String, Object> operadorToMap(Operador op) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", op.getId());
+        m.put("nome_completo", op.getNomeCompleto());
+        m.put("nome_exibicao", op.getNomeExibicao());
+        m.put("email", op.getEmail());
+        m.put("username", op.getUsername());
+        m.put("foto_url", op.getFotoUrl() != null ? op.getFotoUrl() : "");
+        m.put("turno", op.getTurno());
+        m.put("carga_horaria", op.getCargaHoraria());
+        m.put("horario_trabalho_inicio", op.getHorarioTrabalhoInicio());
+        m.put("horario_trabalho_fim", op.getHorarioTrabalhoFim());
+        m.put("plenario_principal", Boolean.TRUE.equals(op.getPlenarioPrincipal()));
+        m.put("plenario_principal_fixo", Boolean.TRUE.equals(op.getPlenarioPrincipalFixo()));
+        m.put("participa_escala", Boolean.TRUE.equals(op.getParticipaEscala()));
+        return m;
+    }
+
+    /** Valida unicidade de e-mail entre as três tabelas, ignorando o próprio operador. */
+    private void verificarConflitoEmail(String email, String operadorIdAtual) {
+        boolean emOutroOperador = operadorRepo.findByEmail(email)
+                .filter(o -> !o.getId().equals(operadorIdAtual)).isPresent();
+        boolean emAdmin = administradorRepo.findByEmail(email).isPresent();
+        boolean emTecnico = tecnicoRepo.findByEmail(email).isPresent();
+        if (emOutroOperador || emAdmin || emTecnico) {
+            throw new ServiceValidationException("conflict", HttpStatus.CONFLICT,
+                    Map.of("message", "E-mail já cadastrado para outro usuário."));
+        }
+    }
+
+    /** null/vazio → null; senão exige formato HH:MM (00:00–23:59). */
+    private String normalizarHora(String raw) {
+        if (isBlank(raw)) return null;
+        String h = raw.strip();
+        if (!HORA_PATTERN.matcher(h).matches()) {
+            throw new ServiceValidationException("HORA_INVALIDA", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Horário inválido: '" + h + "'. Use o formato HH:MM."));
+        }
+        return h;
+    }
+
+    /** null/vazio → null; senão exige 30 ou 40. */
+    private Integer parseCargaHoraria(String raw) {
+        if (isBlank(raw)) return null;
+        int v;
+        try {
+            v = Integer.parseInt(raw.strip());
+        } catch (NumberFormatException e) {
+            throw new ServiceValidationException("CARGA_INVALIDA", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Carga horária inválida."));
+        }
+        if (v != 30 && v != 40) {
+            throw new ServiceValidationException("CARGA_INVALIDA", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Carga horária deve ser 30 ou 40."));
+        }
+        return v;
+    }
+
     // ══ Helpers ═════════════════════════════════════════════════
+
+    private static final java.util.regex.Pattern HORA_PATTERN =
+            java.util.regex.Pattern.compile("^([01]\\d|2[0-3]):[0-5]\\d$");
 
     private void validateSalaId(int salaId) {
         if (salaId <= 0) {

@@ -30,7 +30,7 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
   imports: [FormsModule, RouterLink, PaginationComponent, ColumnFilterComponent, MultiSelectDropdownComponent, FmtDatePipe],
   template: `
     <h1>Inserir Avisos</h1>
-    <a routerLink="/admin/operacao-audio" class="back-link">&larr; Voltar</a>
+    <a routerLink="/admin/gestao-pessoas" class="back-link">&larr; Voltar</a>
 
     <!-- ════════════ FORMULÁRIO DE CADASTRO ════════════ -->
     <section class="card-custom" style="max-width:720px; margin: 16px auto 24px;">

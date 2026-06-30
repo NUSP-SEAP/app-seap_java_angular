@@ -13,9 +13,7 @@ import { environment } from '../../environments/environment';
         </div>
         @if (auth.isLoggedIn()) {
           <div class="site-header__right">
-            @if (userFoto()) {
-              <img class="user-avatar" [src]="userFoto()" alt="Foto">
-            }
+            <img class="user-avatar" [src]="userFoto() || ANONIMO" (error)="onImgError($event)" alt="Foto">
             <span class="user-greeting">{{ userName() }}</span>
             <button class="btn-logout" (click)="auth.logout()">Sair</button>
           </div>
@@ -77,6 +75,14 @@ import { environment } from '../../environments/environment';
 })
 export class HeaderComponent {
   auth = inject(AuthService);
+  readonly ANONIMO = 'assets/imgs/usuario_anonimo.jpg';
+
+  /** Se a foto cadastrada não existir (404), cai para a imagem anônima (sem loop). */
+  onImgError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    if (!img.src.includes('usuario_anonimo')) img.src = this.ANONIMO;
+  }
+
   userName = computed(() => {
     const u = this.auth.user();
     return u?.nome || u?.name || u?.username || '';

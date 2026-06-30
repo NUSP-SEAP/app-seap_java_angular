@@ -23,7 +23,6 @@ interface TableState extends ListParams { page:number; limit:number; sort:string
     <!-- Cards de navegação -->
     <div class="grid-cards">
       <a routerLink="/admin/form-edit" class="card-custom card-link">Edição de Formulários</a>
-      <a routerLink="/admin/avisos-sala" class="card-custom card-link">Inserir Avisos</a>
     </div>
 
     <!-- ════════════ REGISTROS DE OPERAÇÃO ════════════ -->
