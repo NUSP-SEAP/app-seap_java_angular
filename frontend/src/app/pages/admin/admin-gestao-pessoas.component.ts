@@ -63,7 +63,7 @@ interface TableState extends ListParams {
                 <tr>
                   <td><strong>{{ op['nome_completo'] || op['nome'] }}</strong></td>
                   <td>{{ op['email'] }}</td>
-                  <td><button class="btn-xs" (click)="abrirPerfil(op)">Perfil</button></td>
+                  <td><button class="btn-xs" (click)="abrirPerfil('operador', op)">Perfil</button></td>
                 </tr>
               }
             }
@@ -96,15 +96,17 @@ interface TableState extends ListParams {
                 [currentSort]="tecState.sort" [currentDir]="tecState.direction"
                 (sortChange)="onTecSort($event)" (filterChange)="onTecFilter($event)" />
             </th>
+            <th style="width:110px">Ação</th>
           </tr></thead>
           <tbody>
             @if (tecRows().length === 0) {
-              <tr><td colspan="2" class="empty-state">{{ tecLoading() ? 'Carregando...' : 'Nenhum técnico cadastrado.' }}</td></tr>
+              <tr><td colspan="3" class="empty-state">{{ tecLoading() ? 'Carregando...' : 'Nenhum técnico cadastrado.' }}</td></tr>
             } @else {
               @for (t of tecRows(); track t['id']) {
                 <tr>
                   <td><strong>{{ t['nome_completo'] || t['nome'] }}</strong></td>
                   <td>{{ t['email'] }}</td>
+                  <td><button class="btn-xs" (click)="abrirPerfil('tecnico', t)">Perfil</button></td>
                 </tr>
               }
             }
@@ -147,9 +149,9 @@ export class AdminGestaoPessoasComponent implements OnInit {
   tecRows = signal<Record<string,unknown>[]>([]); tecMeta = signal<PaginationMeta|null>(null); tecLoading = signal(true);
   tecSearch = '';
 
-  // ── Navegação para o Perfil do operador ──
-  abrirPerfil(op: Record<string,unknown>): void {
-    this.router.navigate(['/admin/operador/perfil'], { queryParams: { id: op['id'] } });
+  // ── Navegação para o Perfil (operador ou técnico) ──
+  abrirPerfil(tipo: 'operador' | 'tecnico', row: Record<string,unknown>): void {
+    this.router.navigate([`/admin/${tipo}/perfil`], { queryParams: { id: row['id'] } });
   }
 
   ngOnInit(): void { this.loadOperadores(); this.loadTecnicos(); }

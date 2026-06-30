@@ -29,6 +29,10 @@ public class Tecnico extends AuditableEntity {
     @Column(name = "FOTO_URL")
     private String fotoUrl;
 
+    /** Turno: 'M' (Matutino) ou 'V' (Vespertino); NULL = não definido */
+    @Column(name = "TURNO", length = 1)
+    private String turno;
+
     /** Carga horária semanal: 30 ou 40 (NULL = não definida) */
     @Column(name = "CARGA_HORARIA")
     private Integer cargaHoraria;

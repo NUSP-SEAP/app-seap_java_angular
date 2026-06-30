@@ -4,8 +4,15 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { environment } from '../../../environments/environment';
 
+type TipoPessoa = 'operador' | 'tecnico';
+
+/**
+ * Perfil de pessoa (operador ou técnico). O tipo vem de route.data.tipo.
+ * Diferenças do técnico: sem "Nome de Chamada", sem os 3 checkboxes
+ * (Apto/Fixo PP e Participa da Escala) e turno opcional (pode ficar vazio).
+ */
 @Component({
-  selector: 'app-admin-operador-perfil',
+  selector: 'app-admin-pessoa-perfil',
   standalone: true,
   imports: [FormsModule],
   template: `
@@ -13,7 +20,7 @@ import { environment } from '../../../environments/environment';
       @if (loading()) {
         <p class="text-muted-sm">Carregando...</p>
       } @else if (!op()) {
-        <div class="error-box">{{ errorMsg() || 'Operador não encontrado.' }}</div>
+        <div class="error-box">{{ errorMsg() || 'Registro não encontrado.' }}</div>
         <div class="perfil-acoes">
           <button class="btn-secondary-custom" (click)="voltar()">← Voltar</button>
         </div>
@@ -21,7 +28,7 @@ import { environment } from '../../../environments/environment';
         <!-- Cabeçalho: foto + nome -->
         <div class="perfil-header">
           <div class="avatar-wrap">
-            <img class="avatar-lg" [src]="fotoUrl() || ANONIMO" (error)="onImgError($event)" alt="Foto do operador">
+            <img class="avatar-lg" [src]="fotoUrl() || ANONIMO" (error)="onImgError($event)" alt="Foto">
             @if (editing()) {
               <label class="btn-troca-foto">
                 Trocar foto
@@ -43,14 +50,16 @@ import { environment } from '../../../environments/environment';
             }
           </div>
 
-          <div class="perfil-row">
-            <span class="perfil-label">Nome de Chamada:</span>
-            @if (editing()) {
-              <input class="perfil-input" [(ngModel)]="nomeExibicao">
-            } @else {
-              <span class="perfil-valor">{{ op()!['nome_exibicao'] }}</span>
-            }
-          </div>
+          @if (tipo === 'operador') {
+            <div class="perfil-row">
+              <span class="perfil-label">Nome de Chamada:</span>
+              @if (editing()) {
+                <input class="perfil-input" [(ngModel)]="nomeExibicao">
+              } @else {
+                <span class="perfil-valor">{{ op()!['nome_exibicao'] }}</span>
+              }
+            </div>
+          }
 
           <div class="perfil-row">
             <span class="perfil-label">E-mail:</span>
@@ -65,6 +74,7 @@ import { environment } from '../../../environments/environment';
             <span class="perfil-label">Turno:</span>
             @if (editing()) {
               <select class="perfil-input perfil-input-sm" [(ngModel)]="turno">
+                @if (tipo !== 'operador') { <option value="">—</option> }
                 <option value="M">Matutino</option>
                 <option value="V">Vespertino</option>
               </select>
@@ -99,19 +109,21 @@ import { environment } from '../../../environments/environment';
             }
           </div>
 
-          <!-- Checkboxes -->
-          <div class="perfil-check">
-            <input type="checkbox" id="chk-apto" [(ngModel)]="plenarioPrincipal" [disabled]="!editing()" (change)="onPlenarioChange()">
-            <label for="chk-apto">Apto a operar no Plenário Principal</label>
-          </div>
-          <div class="perfil-check perfil-check-indent">
-            <input type="checkbox" id="chk-fixo" [(ngModel)]="plenarioPrincipalFixo" [disabled]="!editing() || !plenarioPrincipal">
-            <label for="chk-fixo" [style.color]="plenarioPrincipal ? null : '#94a3b8'">Operador fixo do Plenário Principal</label>
-          </div>
-          <div class="perfil-check">
-            <input type="checkbox" id="chk-escala" [(ngModel)]="participaEscala" [disabled]="!editing()">
-            <label for="chk-escala">Participa da Escala</label>
-          </div>
+          <!-- Checkboxes (somente operador) -->
+          @if (tipo === 'operador') {
+            <div class="perfil-check">
+              <input type="checkbox" id="chk-apto" [(ngModel)]="plenarioPrincipal" [disabled]="!editing()" (change)="onPlenarioChange()">
+              <label for="chk-apto">Apto a operar no Plenário Principal</label>
+            </div>
+            <div class="perfil-check perfil-check-indent">
+              <input type="checkbox" id="chk-fixo" [(ngModel)]="plenarioPrincipalFixo" [disabled]="!editing() || !plenarioPrincipal">
+              <label for="chk-fixo" [style.color]="plenarioPrincipal ? null : '#94a3b8'">Operador fixo do Plenário Principal</label>
+            </div>
+            <div class="perfil-check">
+              <input type="checkbox" id="chk-escala" [(ngModel)]="participaEscala" [disabled]="!editing()">
+              <label for="chk-escala">Participa da Escala</label>
+            </div>
+          }
         </div>
 
         @if (errorMsg()) { <div class="error-box">{{ errorMsg() }}</div> }
@@ -156,11 +168,12 @@ import { environment } from '../../../environments/environment';
     .error-box { background:#fef2f2; color:#b91c1c; border:1px solid #fca5a5; border-radius:8px; padding:10px 14px; font-size:.875rem; margin-top:16px; }
   `],
 })
-export class AdminOperadorPerfilComponent implements OnInit {
+export class AdminPessoaPerfilComponent implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
+  tipo: TipoPessoa = 'operador';
   private id = '';
   op = signal<Record<string, any> | null>(null);
   loading = signal(true);
@@ -172,7 +185,7 @@ export class AdminOperadorPerfilComponent implements OnInit {
   nomeCompleto = '';
   nomeExibicao = '';
   email = '';
-  turno = 'M';
+  turno = '';
   cargaHoraria = '';   // '', '30' ou '40'
   horaInicio = '';
   horaFim = '';
@@ -184,7 +197,6 @@ export class AdminOperadorPerfilComponent implements OnInit {
   fotoPreview = signal('');
 
   readonly ANONIMO = 'assets/imgs/usuario_anonimo.jpg';
-
   private readonly horaRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 
   /** Se a foto cadastrada não existir (404), cai para a imagem anônima (sem loop). */
@@ -194,16 +206,17 @@ export class AdminOperadorPerfilComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.tipo = (this.route.snapshot.data['tipo'] as TipoPessoa) || 'operador';
     this.id = this.route.snapshot.queryParamMap.get('id') || '';
-    if (!this.id) { this.errorMsg.set('Operador não informado.'); this.loading.set(false); return; }
+    if (!this.id) { this.errorMsg.set('Registro não informado.'); this.loading.set(false); return; }
     this.carregar();
   }
 
   private carregar(): void {
     this.loading.set(true);
-    this.api.get<any>(`/api/admin/operador/${this.id}`).subscribe({
-      next: res => { const o = res?.operador ?? res; this.op.set(o); this.popularCampos(o); this.loading.set(false); },
-      error: () => { this.errorMsg.set('Erro ao carregar o operador.'); this.loading.set(false); },
+    this.api.get<any>(`/api/admin/${this.tipo}/${this.id}`).subscribe({
+      next: res => { const o = res?.operador ?? res?.tecnico ?? res; this.op.set(o); this.popularCampos(o); this.loading.set(false); },
+      error: () => { this.errorMsg.set('Erro ao carregar o registro.'); this.loading.set(false); },
     });
   }
 
@@ -211,7 +224,7 @@ export class AdminOperadorPerfilComponent implements OnInit {
     this.nomeCompleto = o['nome_completo'] || '';
     this.nomeExibicao = o['nome_exibicao'] || '';
     this.email = o['email'] || '';
-    this.turno = o['turno'] || 'M';
+    this.turno = o['turno'] || (this.tipo === 'operador' ? 'M' : '');
     this.cargaHoraria = o['carga_horaria'] != null ? String(o['carga_horaria']) : '';
     this.horaInicio = o['horario_trabalho_inicio'] || '';
     this.horaFim = o['horario_trabalho_fim'] || '';
@@ -220,7 +233,7 @@ export class AdminOperadorPerfilComponent implements OnInit {
     this.participaEscala = o['participa_escala'] === true || o['participa_escala'] === 1;
   }
 
-  // Foto exibida: preview da nova foto > foto atual > '' (mostra iniciais)
+  // Foto exibida: preview da nova foto > foto atual > '' (cai para a anônima)
   fotoUrl = computed(() => {
     if (this.fotoPreview()) return this.fotoPreview();
     const u = this.op()?.['foto_url'];
@@ -262,6 +275,18 @@ export class AdminOperadorPerfilComponent implements OnInit {
     if (!this.plenarioPrincipal) this.plenarioPrincipalFixo = false;
   }
 
+  onFileSelect(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] || null;
+    this.foto = file;
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => this.fotoPreview.set(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      this.fotoPreview.set('');
+    }
+  }
+
   /** Máscara HH:MM: aceita só dígitos (máx. 4) e insere ':' automaticamente após o 2º. */
   onHoraInput(event: Event, campo: 'inicio' | 'fim'): void {
     const input = event.target as HTMLInputElement;
@@ -275,22 +300,13 @@ export class AdminOperadorPerfilComponent implements OnInit {
     if (campo === 'inicio') this.horaInicio = masked; else this.horaFim = masked;
   }
 
-  onFileSelect(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0] || null;
-    this.foto = file;
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => this.fotoPreview.set(reader.result as string);
-      reader.readAsDataURL(file);
-    } else {
-      this.fotoPreview.set('');
-    }
-  }
-
   salvar(): void {
     this.errorMsg.set('');
-    if (!this.nomeCompleto.trim() || !this.nomeExibicao.trim() || !this.email.trim()) {
-      this.errorMsg.set('Nome, Nome de Chamada e E-mail são obrigatórios.'); return;
+    if (!this.nomeCompleto.trim() || !this.email.trim() || (this.tipo === 'operador' && !this.nomeExibicao.trim())) {
+      this.errorMsg.set(this.tipo === 'operador'
+        ? 'Nome, Nome de Chamada e E-mail são obrigatórios.'
+        : 'Nome e E-mail são obrigatórios.');
+      return;
     }
     if (this.horaInicio && !this.horaRe.test(this.horaInicio)) { this.errorMsg.set('Horário de início inválido (use HH:MM).'); return; }
     if (this.horaFim && !this.horaRe.test(this.horaFim)) { this.errorMsg.set('Horário de fim inválido (use HH:MM).'); return; }
@@ -298,21 +314,23 @@ export class AdminOperadorPerfilComponent implements OnInit {
     this.saving.set(true);
     const fd = new FormData();
     fd.append('nome_completo', this.nomeCompleto.trim());
-    fd.append('nome_exibicao', this.nomeExibicao.trim());
     fd.append('email', this.email.trim());
     fd.append('turno', this.turno);
     fd.append('carga_horaria', this.cargaHoraria);
     fd.append('horario_trabalho_inicio', this.horaInicio.trim());
     fd.append('horario_trabalho_fim', this.horaFim.trim());
-    fd.append('plenario_principal', String(this.plenarioPrincipal));
-    fd.append('plenario_principal_fixo', String(this.plenarioPrincipal && this.plenarioPrincipalFixo));
-    fd.append('participa_escala', String(this.participaEscala));
+    if (this.tipo === 'operador') {
+      fd.append('nome_exibicao', this.nomeExibicao.trim());
+      fd.append('plenario_principal', String(this.plenarioPrincipal));
+      fd.append('plenario_principal_fixo', String(this.plenarioPrincipal && this.plenarioPrincipalFixo));
+      fd.append('participa_escala', String(this.participaEscala));
+    }
     if (this.foto) fd.append('foto', this.foto);
 
-    this.api.postForm<any>(`/api/admin/operador/${this.id}/atualizar`, fd).subscribe({
+    this.api.postForm<any>(`/api/admin/${this.tipo}/${this.id}/atualizar`, fd).subscribe({
       next: res => {
         this.saving.set(false);
-        const o = res?.operador ?? res;
+        const o = res?.operador ?? res?.tecnico ?? res;
         this.op.set(o); this.popularCampos(o);
         this.foto = null; this.fotoPreview.set('');
         this.editing.set(false);

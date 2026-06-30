@@ -169,6 +169,34 @@ public class AdminCrudController {
         return ResponseEntity.ok(Map.of("ok", true, "operador", operador));
     }
 
+    // ══ Perfil de Técnico — Buscar ═════════════════════════════
+
+    @GetMapping("/tecnico/{id}")
+    public ResponseEntity<?> tecnicoPerfil(@PathVariable String id) {
+        Map<String, Object> tecnico = crudService.getTecnicoPerfil(id);
+        return ResponseEntity.ok(Map.of("ok", true, "tecnico", tecnico));
+    }
+
+    // ══ Perfil de Técnico — Atualizar (multipart: foto opcional) ═
+
+    @PostMapping("/tecnico/{id}/atualizar")
+    public ResponseEntity<?> tecnicoAtualizar(
+            @PathVariable String id,
+            @RequestParam(value = "nome_completo", required = false) String nomeCompleto,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "turno", required = false) String turno,
+            @RequestParam(value = "carga_horaria", required = false) String cargaHoraria,
+            @RequestParam(value = "horario_trabalho_inicio", required = false) String horarioInicio,
+            @RequestParam(value = "horario_trabalho_fim", required = false) String horarioFim,
+            @RequestParam(value = "foto", required = false) MultipartFile foto) {
+
+        Map<String, Object> tecnico = crudService.atualizarTecnico(
+                id, nomeCompleto, email, turno, cargaHoraria,
+                horarioInicio, horarioFim, foto);
+
+        return ResponseEntity.ok(Map.of("ok", true, "tecnico", tecnico));
+    }
+
     // ══ Form Edit — Listar ══════════════════════════════════════
 
     @GetMapping("/form-edit/{entidade}/list")

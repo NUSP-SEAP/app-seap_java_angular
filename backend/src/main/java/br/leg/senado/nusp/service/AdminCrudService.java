@@ -652,7 +652,7 @@ public class AdminCrudService {
         // E-mail: normaliza e, se mudou, valida conflito global (operador/admin/técnico)
         String novoEmail = email.strip().toLowerCase();
         if (!novoEmail.equals(op.getEmail())) {
-            verificarConflitoEmail(novoEmail, id);
+            verificarConflitoEmail(novoEmail, "operador", id);
         }
 
         // Foto: só substitui se uma nova for enviada. Salva a nova primeiro
@@ -696,13 +696,90 @@ public class AdminCrudService {
         return m;
     }
 
-    /** Valida unicidade de e-mail entre as três tabelas, ignorando o próprio operador. */
-    private void verificarConflitoEmail(String email, String operadorIdAtual) {
-        boolean emOutroOperador = operadorRepo.findByEmail(email)
-                .filter(o -> !o.getId().equals(operadorIdAtual)).isPresent();
-        boolean emAdmin = administradorRepo.findByEmail(email).isPresent();
-        boolean emTecnico = tecnicoRepo.findByEmail(email).isPresent();
-        if (emOutroOperador || emAdmin || emTecnico) {
+    // ══ Perfil de Técnico — Buscar ═══════════════════════════════
+
+    public Map<String, Object> getTecnicoPerfil(String id) {
+        Tecnico tec = tecnicoRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Técnico não encontrado.")));
+        return tecnicoToMap(tec);
+    }
+
+    // ══ Perfil de Técnico — Atualizar ════════════════════════════
+
+    @Transactional
+    public Map<String, Object> atualizarTecnico(
+            String id, String nomeCompleto, String email, String turno,
+            String cargaHorariaRaw, String horarioInicio, String horarioFim,
+            MultipartFile foto) {
+
+        Tecnico tec = tecnicoRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Técnico não encontrado.")));
+
+        List<String> faltantes = new ArrayList<>();
+        if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
+        if (isBlank(email))        faltantes.add("email");
+        if (!faltantes.isEmpty()) {
+            throw new ServiceValidationException("invalid_payload", HttpStatus.BAD_REQUEST,
+                    Map.of("missing", String.join(", ", faltantes)));
+        }
+
+        // Técnico: turno é OPCIONAL (pode ficar NULL)
+        String turnoNorm = normalizarTurnoOpcional(turno);
+        Integer cargaHoraria = parseCargaHoraria(cargaHorariaRaw);
+        String horaInicio = normalizarHora(horarioInicio);
+        String horaFim = normalizarHora(horarioFim);
+
+        String novoEmail = email.strip().toLowerCase();
+        if (!novoEmail.equals(tec.getEmail())) {
+            verificarConflitoEmail(novoEmail, "tecnico", id);
+        }
+
+        // Foto: salva a nova primeiro e só então apaga a anterior (mesma lógica do operador)
+        if (foto != null && !foto.isEmpty()) {
+            String urlAntiga = tec.getFotoUrl();
+            tec.setFotoUrl(salvarFoto(tec.getUsername(), foto, tecnicosDirname));
+            apagarFotoFisica(urlAntiga);
+        }
+
+        tec.setNomeCompleto(nomeCompleto.strip());
+        tec.setEmail(novoEmail);
+        tec.setTurno(turnoNorm);
+        tec.setCargaHoraria(cargaHoraria);
+        tec.setHorarioTrabalhoInicio(horaInicio);
+        tec.setHorarioTrabalhoFim(horaFim);
+        tec = tecnicoRepo.save(tec);
+
+        return tecnicoToMap(tec);
+    }
+
+    private Map<String, Object> tecnicoToMap(Tecnico tec) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", tec.getId());
+        m.put("nome_completo", tec.getNomeCompleto());
+        m.put("email", tec.getEmail());
+        m.put("username", tec.getUsername());
+        m.put("foto_url", tec.getFotoUrl() != null ? tec.getFotoUrl() : "");
+        m.put("turno", tec.getTurno());
+        m.put("carga_horaria", tec.getCargaHoraria());
+        m.put("horario_trabalho_inicio", tec.getHorarioTrabalhoInicio());
+        m.put("horario_trabalho_fim", tec.getHorarioTrabalhoFim());
+        return m;
+    }
+
+    /**
+     * Valida unicidade de e-mail entre as três tabelas (operador/admin/técnico),
+     * ignorando o próprio registro (tipo + id) que está sendo editado.
+     */
+    private void verificarConflitoEmail(String email, String tipoIgnorar, String idIgnorar) {
+        boolean emOperador = operadorRepo.findByEmail(email)
+                .filter(o -> !("operador".equals(tipoIgnorar) && o.getId().equals(idIgnorar))).isPresent();
+        boolean emAdmin = administradorRepo.findByEmail(email)
+                .filter(a -> !("admin".equals(tipoIgnorar) && a.getId().equals(idIgnorar))).isPresent();
+        boolean emTecnico = tecnicoRepo.findByEmail(email)
+                .filter(t -> !("tecnico".equals(tipoIgnorar) && t.getId().equals(idIgnorar))).isPresent();
+        if (emOperador || emAdmin || emTecnico) {
             throw new ServiceValidationException("conflict", HttpStatus.CONFLICT,
                     Map.of("message", "E-mail já cadastrado para outro usuário."));
         }
@@ -734,6 +811,17 @@ public class AdminCrudService {
                     Map.of("message", "Carga horária deve ser 30 ou 40."));
         }
         return v;
+    }
+
+    /** null/vazio → null; senão exige 'M' ou 'V' (turno opcional — usado no técnico). */
+    private String normalizarTurnoOpcional(String raw) {
+        if (isBlank(raw)) return null;
+        String t = raw.strip();
+        if (!"M".equals(t) && !"V".equals(t)) {
+            throw new ServiceValidationException("TURNO_INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Turno deve ser 'M' (Matutino) ou 'V' (Vespertino)."));
+        }
+        return t;
     }
 
     // ══ Helpers ═════════════════════════════════════════════════
