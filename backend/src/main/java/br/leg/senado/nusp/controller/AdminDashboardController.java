@@ -37,6 +37,8 @@ public class AdminDashboardController {
     private String supervisorUsername;
     @Value("${app.admin.chefe-username}")
     private String chefeUsername;
+    @Value("${app.admin.master-username}")
+    private String masterUsername;
 
     // ══ Helpers comuns ════════════════════════════════════════
 
@@ -101,6 +103,24 @@ public class AdminDashboardController {
             @RequestParam(required = false) String filters) {
         int p = getInt(page, 1), l = getInt(limit, 25);
         return pagedResponse(dashboardService.listTecnicos(p, l, search, sort, direction, parseJson(filters)), p, l);
+    }
+
+    // ══ Administradores (somente o master) ════════════════════
+
+    @GetMapping("/dashboard/administradores")
+    public ResponseEntity<?> administradores(
+            @RequestParam(defaultValue = "1") String page,
+            @RequestParam(defaultValue = "25") String limit,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "nome") String sort,
+            @RequestParam(defaultValue = "asc") String direction,
+            @RequestParam(required = false) String filters,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (!masterUsername.equalsIgnoreCase(principal.getUsername())) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "forbidden"));
+        }
+        int p = getInt(page, 1), l = getInt(limit, 25);
+        return pagedResponse(dashboardService.listAdministradores(p, l, search, sort, direction, parseJson(filters)), p, l);
     }
 
     // ══ Checklists ════════════════════════════════════════════

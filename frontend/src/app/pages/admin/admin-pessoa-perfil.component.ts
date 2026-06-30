@@ -2,14 +2,18 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { environment } from '../../../environments/environment';
 
-type TipoPessoa = 'operador' | 'tecnico';
+type TipoPessoa = 'operador' | 'tecnico' | 'administrador';
 
 /**
- * Perfil de pessoa (operador ou técnico). O tipo vem de route.data.tipo.
- * Diferenças do técnico: sem "Nome de Chamada", sem os 3 checkboxes
- * (Apto/Fixo PP e Participa da Escala) e turno opcional (pode ficar vazio).
+ * Perfil de pessoa (operador, técnico ou administrador). O tipo vem de route.data.tipo.
+ * - Técnico: sem "Nome de Chamada", sem os 3 checkboxes (Apto/Fixo PP e Participa
+ *   da Escala) e turno opcional (pode ficar vazio).
+ * - Administrador (rota só do master): sem "Nome de Chamada" e sem os 3 checkboxes;
+ *   tem o checkbox "Servidor Público" (logo após o e-mail) e turno com a opção extra
+ *   "Integral" (I). Quando servidor público, oculta turno/carga/horário (gravados NULL).
  */
 @Component({
   selector: 'app-admin-pessoa-perfil',
@@ -70,6 +74,16 @@ type TipoPessoa = 'operador' | 'tecnico';
             }
           </div>
 
+          <!-- Servidor Público (somente administrador) -->
+          @if (tipo === 'administrador') {
+            <div class="perfil-check">
+              <input type="checkbox" id="chk-servidor" [(ngModel)]="servidorPublico" [disabled]="!editing()">
+              <label for="chk-servidor">Servidor Público</label>
+            </div>
+          }
+
+          <!-- Turno / Carga / Horário: ocultos para admin servidor público -->
+          @if (mostrarJornada) {
           <div class="perfil-row">
             <span class="perfil-label">Turno:</span>
             @if (editing()) {
@@ -77,6 +91,7 @@ type TipoPessoa = 'operador' | 'tecnico';
                 @if (tipo !== 'operador') { <option value="">—</option> }
                 <option value="M">Matutino</option>
                 <option value="V">Vespertino</option>
+                @if (tipo === 'administrador') { <option value="I">Integral</option> }
               </select>
             } @else {
               <span class="perfil-valor">{{ turnoLabel() }}</span>
@@ -108,6 +123,7 @@ type TipoPessoa = 'operador' | 'tecnico';
               <span class="perfil-valor">{{ horarioLabel() }}</span>
             }
           </div>
+          }
 
           <!-- Checkboxes (somente operador) -->
           @if (tipo === 'operador') {
@@ -172,6 +188,7 @@ export class AdminPessoaPerfilComponent implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private auth = inject(AuthService);
 
   tipo: TipoPessoa = 'operador';
   private id = '';
@@ -192,9 +209,20 @@ export class AdminPessoaPerfilComponent implements OnInit {
   plenarioPrincipal = false;
   plenarioPrincipalFixo = false;
   participaEscala = false;
+  servidorPublico = false;   // só administrador
 
   foto: File | null = null;
   fotoPreview = signal('');
+
+  /**
+   * Turno/Carga/Horário aparecem para operador e técnico sempre; para o
+   * administrador, só quando NÃO for servidor público (em edição segue o
+   * checkbox; em visualização, o valor carregado).
+   */
+  get mostrarJornada(): boolean {
+    if (this.tipo !== 'administrador') return true;
+    return this.editing() ? !this.servidorPublico : !this.op()?.['servidor_publico'];
+  }
 
   readonly ANONIMO = 'assets/imgs/usuario_anonimo.jpg';
   private readonly horaRe = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -215,7 +243,7 @@ export class AdminPessoaPerfilComponent implements OnInit {
   private carregar(): void {
     this.loading.set(true);
     this.api.get<any>(`/api/admin/${this.tipo}/${this.id}`).subscribe({
-      next: res => { const o = res?.operador ?? res?.tecnico ?? res; this.op.set(o); this.popularCampos(o); this.loading.set(false); },
+      next: res => { const o = res?.operador ?? res?.tecnico ?? res?.administrador ?? res; this.op.set(o); this.popularCampos(o); this.loading.set(false); },
       error: () => { this.errorMsg.set('Erro ao carregar o registro.'); this.loading.set(false); },
     });
   }
@@ -231,6 +259,7 @@ export class AdminPessoaPerfilComponent implements OnInit {
     this.plenarioPrincipal = o['plenario_principal'] === true || o['plenario_principal'] === 1;
     this.plenarioPrincipalFixo = o['plenario_principal_fixo'] === true || o['plenario_principal_fixo'] === 1;
     this.participaEscala = o['participa_escala'] === true || o['participa_escala'] === 1;
+    this.servidorPublico = o['servidor_publico'] === true || o['servidor_publico'] === 1;
   }
 
   // Foto exibida: preview da nova foto > foto atual > '' (cai para a anônima)
@@ -243,7 +272,7 @@ export class AdminPessoaPerfilComponent implements OnInit {
 
   turnoLabel = computed(() => {
     const t = this.op()?.['turno'];
-    return t === 'V' ? 'Vespertino' : t === 'M' ? 'Matutino' : '—';
+    return t === 'V' ? 'Vespertino' : t === 'M' ? 'Matutino' : t === 'I' ? 'Integral' : '—';
   });
 
   cargaLabel = computed(() => {
@@ -308,8 +337,10 @@ export class AdminPessoaPerfilComponent implements OnInit {
         : 'Nome e E-mail são obrigatórios.');
       return;
     }
-    if (this.horaInicio && !this.horaRe.test(this.horaInicio)) { this.errorMsg.set('Horário de início inválido (use HH:MM).'); return; }
-    if (this.horaFim && !this.horaRe.test(this.horaFim)) { this.errorMsg.set('Horário de fim inválido (use HH:MM).'); return; }
+    if (this.mostrarJornada) {
+      if (this.horaInicio && !this.horaRe.test(this.horaInicio)) { this.errorMsg.set('Horário de início inválido (use HH:MM).'); return; }
+      if (this.horaFim && !this.horaRe.test(this.horaFim)) { this.errorMsg.set('Horário de fim inválido (use HH:MM).'); return; }
+    }
 
     this.saving.set(true);
     const fd = new FormData();
@@ -325,13 +356,18 @@ export class AdminPessoaPerfilComponent implements OnInit {
       fd.append('plenario_principal_fixo', String(this.plenarioPrincipal && this.plenarioPrincipalFixo));
       fd.append('participa_escala', String(this.participaEscala));
     }
+    if (this.tipo === 'administrador') {
+      fd.append('servidor_publico', String(this.servidorPublico));
+    }
     if (this.foto) fd.append('foto', this.foto);
 
     this.api.postForm<any>(`/api/admin/${this.tipo}/${this.id}/atualizar`, fd).subscribe({
       next: res => {
         this.saving.set(false);
-        const o = res?.operador ?? res?.tecnico ?? res;
+        const o = res?.operador ?? res?.tecnico ?? res?.administrador ?? res;
         this.op.set(o); this.popularCampos(o);
+        // Se editou o próprio registro, reflete a (eventual) nova foto no header sem re-login
+        if (this.id === this.auth.currentUserId()) this.auth.setFotoUrl(o['foto_url'] || '');
         this.foto = null; this.fotoPreview.set('');
         this.editing.set(false);
       },

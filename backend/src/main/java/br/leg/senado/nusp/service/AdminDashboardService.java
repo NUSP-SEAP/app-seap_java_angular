@@ -57,6 +57,22 @@ public class AdminDashboardService {
                 page, limit, search, sort, dir, null, filters);
     }
 
+    // ══ Administradores (somente master — guarda no controller) ═
+
+    private static final Map<String, String> ADM_SORT = Map.of(
+            "nome", "a.NOME_COMPLETO", "email", "a.EMAIL");
+
+    public PagedResult listAdministradores(int page, int limit, String search, String sort, String dir,
+                                           Map<String, Object> filters) {
+        return DashboardQueryHelper.executePagedQuery(em,
+                "a.ID, a.NOME_COMPLETO, a.EMAIL",
+                "FROM PES_ADMINISTRADOR a",
+                null, ADM_SORT, List.of("a.NOME_COMPLETO", "a.EMAIL"),
+                Map.of("nome", "a.NOME_COMPLETO", "email", "a.EMAIL"),
+                Map.of("nome", "text", "email", "text"),
+                page, limit, search, sort, dir, null, filters);
+    }
+
     // ══ Checklists ════════════════════════════════════════════
 
     private static final Map<String, String> CL_SORT = new LinkedHashMap<>() {{

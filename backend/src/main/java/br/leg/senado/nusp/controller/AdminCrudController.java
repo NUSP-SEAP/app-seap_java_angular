@@ -197,6 +197,38 @@ public class AdminCrudController {
         return ResponseEntity.ok(Map.of("ok", true, "tecnico", tecnico));
     }
 
+    // ══ Perfil de Administrador — Buscar (somente master) ══════
+
+    @GetMapping("/administrador/{id}")
+    public ResponseEntity<?> administradorPerfil(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Map<String, Object> administrador = crudService.getAdministradorPerfil(id, principal.getUsername());
+        return ResponseEntity.ok(Map.of("ok", true, "administrador", administrador));
+    }
+
+    // ══ Perfil de Administrador — Atualizar (multipart; só master) ═
+
+    @PostMapping("/administrador/{id}/atualizar")
+    public ResponseEntity<?> administradorAtualizar(
+            @PathVariable String id,
+            @RequestParam(value = "nome_completo", required = false) String nomeCompleto,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "servidor_publico", required = false, defaultValue = "false") boolean servidorPublico,
+            @RequestParam(value = "turno", required = false) String turno,
+            @RequestParam(value = "carga_horaria", required = false) String cargaHoraria,
+            @RequestParam(value = "horario_trabalho_inicio", required = false) String horarioInicio,
+            @RequestParam(value = "horario_trabalho_fim", required = false) String horarioFim,
+            @RequestParam(value = "foto", required = false) MultipartFile foto,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        Map<String, Object> administrador = crudService.atualizarAdministrador(
+                id, nomeCompleto, email, servidorPublico, turno, cargaHoraria,
+                horarioInicio, horarioFim, foto, principal.getUsername());
+
+        return ResponseEntity.ok(Map.of("ok", true, "administrador", administrador));
+    }
+
     // ══ Form Edit — Listar ══════════════════════════════════════
 
     @GetMapping("/form-edit/{entidade}/list")

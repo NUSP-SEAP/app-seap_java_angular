@@ -51,6 +51,9 @@ public class AdminCrudService {
     @Value("${app.files.tecnicos-dirname}")
     private String tecnicosDirname;
 
+    @Value("${app.files.administradores-dirname}")
+    private String administradoresDirname;
+
     @Value("${app.admin.master-username}")
     private String masterUsername;
 
@@ -198,9 +201,7 @@ public class AdminCrudService {
     public Map<String, Object> criarAdministrador(String nomeCompleto, String email,
                                                    String username, String senha,
                                                    String callerUsername) {
-        if (!masterUsername.equalsIgnoreCase(callerUsername)) {
-            throw new ServiceValidationException("forbidden", HttpStatus.FORBIDDEN);
-        }
+        requireMaster(callerUsername);
 
         List<String> faltantes = new ArrayList<>();
         if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
@@ -768,6 +769,89 @@ public class AdminCrudService {
         return m;
     }
 
+    // ══ Perfil de Administrador — Buscar (somente master) ════════
+
+    public Map<String, Object> getAdministradorPerfil(String id, String callerUsername) {
+        requireMaster(callerUsername);
+        Administrador adm = administradorRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Administrador não encontrado.")));
+        return administradorToMap(adm);
+    }
+
+    // ══ Perfil de Administrador — Atualizar (somente master) ═════
+
+    @Transactional
+    public Map<String, Object> atualizarAdministrador(
+            String id, String nomeCompleto, String email, boolean servidorPublico,
+            String turno, String cargaHorariaRaw, String horarioInicio, String horarioFim,
+            MultipartFile foto, String callerUsername) {
+
+        requireMaster(callerUsername);
+
+        Administrador adm = administradorRepo.findById(id)
+                .orElseThrow(() -> new ServiceValidationException("NOT_FOUND", HttpStatus.NOT_FOUND,
+                        Map.of("message", "Administrador não encontrado.")));
+
+        List<String> faltantes = new ArrayList<>();
+        if (isBlank(nomeCompleto)) faltantes.add("nome_completo");
+        if (isBlank(email))        faltantes.add("email");
+        if (!faltantes.isEmpty()) {
+            throw new ServiceValidationException("invalid_payload", HttpStatus.BAD_REQUEST,
+                    Map.of("missing", String.join(", ", faltantes)));
+        }
+
+        // Servidor público: turno/carga/horário não se aplicam → gravados como NULL.
+        // Caso contrário, valida e normaliza os três (turno do admin aceita M/V/I).
+        String turnoNorm = null;
+        Integer cargaHoraria = null;
+        String horaInicio = null, horaFim = null;
+        if (!servidorPublico) {
+            turnoNorm = normalizarTurnoAdmin(turno);
+            cargaHoraria = parseCargaHoraria(cargaHorariaRaw);
+            horaInicio = normalizarHora(horarioInicio);
+            horaFim = normalizarHora(horarioFim);
+        }
+
+        String novoEmail = email.strip().toLowerCase();
+        if (!novoEmail.equals(adm.getEmail())) {
+            verificarConflitoEmail(novoEmail, "admin", id);
+        }
+
+        // Foto: salva a nova primeiro e só então apaga a anterior (mesma lógica do operador/técnico)
+        if (foto != null && !foto.isEmpty()) {
+            String urlAntiga = adm.getFotoUrl();
+            adm.setFotoUrl(salvarFoto(adm.getUsername(), foto, administradoresDirname));
+            apagarFotoFisica(urlAntiga);
+        }
+
+        adm.setNomeCompleto(nomeCompleto.strip());
+        adm.setEmail(novoEmail);
+        adm.setServidorPublico(servidorPublico);
+        adm.setTurno(turnoNorm);
+        adm.setCargaHoraria(cargaHoraria);
+        adm.setHorarioTrabalhoInicio(horaInicio);
+        adm.setHorarioTrabalhoFim(horaFim);
+        adm = administradorRepo.save(adm);
+
+        return administradorToMap(adm);
+    }
+
+    private Map<String, Object> administradorToMap(Administrador adm) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", adm.getId());
+        m.put("nome_completo", adm.getNomeCompleto());
+        m.put("email", adm.getEmail());
+        m.put("username", adm.getUsername());
+        m.put("foto_url", adm.getFotoUrl() != null ? adm.getFotoUrl() : "");
+        m.put("servidor_publico", Boolean.TRUE.equals(adm.getServidorPublico()));
+        m.put("turno", adm.getTurno());
+        m.put("carga_horaria", adm.getCargaHoraria());
+        m.put("horario_trabalho_inicio", adm.getHorarioTrabalhoInicio());
+        m.put("horario_trabalho_fim", adm.getHorarioTrabalhoFim());
+        return m;
+    }
+
     /**
      * Valida unicidade de e-mail entre as três tabelas (operador/admin/técnico),
      * ignorando o próprio registro (tipo + id) que está sendo editado.
@@ -822,6 +906,24 @@ public class AdminCrudService {
                     Map.of("message", "Turno deve ser 'M' (Matutino) ou 'V' (Vespertino)."));
         }
         return t;
+    }
+
+    /** null/vazio → null; senão exige 'M', 'V' ou 'I' (turno do admin: inclui Integral). */
+    private String normalizarTurnoAdmin(String raw) {
+        if (isBlank(raw)) return null;
+        String t = raw.strip();
+        if (!"M".equals(t) && !"V".equals(t) && !"I".equals(t)) {
+            throw new ServiceValidationException("TURNO_INVALIDO", HttpStatus.BAD_REQUEST,
+                    Map.of("message", "Turno deve ser 'M' (Matutino), 'V' (Vespertino) ou 'I' (Integral)."));
+        }
+        return t;
+    }
+
+    /** Garante que o solicitante é o administrador master (criar/ver/editar admins). */
+    private void requireMaster(String callerUsername) {
+        if (!masterUsername.equalsIgnoreCase(callerUsername)) {
+            throw new ServiceValidationException("forbidden", HttpStatus.FORBIDDEN);
+        }
     }
 
     // ══ Helpers ═════════════════════════════════════════════════

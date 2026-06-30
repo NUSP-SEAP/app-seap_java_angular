@@ -165,8 +165,9 @@ public class AuthService {
      * Equivale ao get_foto_url_by_id() do Python.
      */
     public String getFotoUrl(String userId, String role) {
-        if ("operador".equals(role)) return operadorRepository.findFotoUrlById(userId).orElse("");
-        if ("tecnico".equals(role))  return tecnicoRepository.findFotoUrlById(userId).orElse("");
+        if ("operador".equals(role))      return operadorRepository.findFotoUrlById(userId).orElse("");
+        if ("tecnico".equals(role))       return tecnicoRepository.findFotoUrlById(userId).orElse("");
+        if ("administrador".equals(role)) return administradorRepository.findFotoUrlById(userId).orElse("");
         return "";
     }
 }

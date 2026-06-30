@@ -45,3 +45,5 @@ databaseChangeLog:
       file: db/changelog/022-pessoa-carga-horario.yaml
   - include:
       file: db/changelog/023-tecnico-turno.yaml
+  - include:
+      file: db/changelog/024-admin-perfil.yaml

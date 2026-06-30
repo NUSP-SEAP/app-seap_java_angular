@@ -29,6 +29,17 @@ public class Administrador extends AuditableEntity {
     @Column(name = "SENHA_PROVISORIA", nullable = false)
     private Boolean senhaProvisoria = false;
 
+    @Column(name = "FOTO_URL")
+    private String fotoUrl;
+
+    /** Turno: 'M' (Matutino), 'V' (Vespertino) ou 'I' (Integral); NULL = não definido */
+    @Column(name = "TURNO", length = 1)
+    private String turno;
+
+    /** Servidor público efetivo: quando true, turno/carga/horário não se aplicam (ficam NULL) */
+    @Column(name = "SERVIDOR_PUBLICO", nullable = false)
+    private Boolean servidorPublico = true;
+
     /** Carga horária semanal: 30 ou 40 (NULL = não definida) */
     @Column(name = "CARGA_HORARIA")
     private Integer cargaHoraria;

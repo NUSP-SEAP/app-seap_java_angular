@@ -25,6 +25,7 @@ export class AuthService {
   isLoggedIn = computed(() => !!this._token());
   isAdmin = computed(() => this._role() === 'administrador');
   isTecnico = computed(() => this._role() === 'tecnico');
+  isMaster = computed(() => this.isAdmin() && !!this._user()?.isMaster);
   senhaProvisoria = computed(() => !!this._user()?.senhaProvisoria);
 
   constructor(private http: HttpClient, private router: Router) {
@@ -88,6 +89,18 @@ export class AuthService {
     this._user.set(updated);
     localStorage.setItem(USER_KEY, JSON.stringify({ user: updated, role: this._role() }));
   }
+
+  /** Atualiza a foto do usuário logado (reflete no header sem novo login). */
+  setFotoUrl(fotoUrl: string): void {
+    const u = this._user();
+    if (!u) return;
+    const updated: User = { ...u, foto_url: fotoUrl || undefined };
+    this._user.set(updated);
+    localStorage.setItem(USER_KEY, JSON.stringify({ user: updated, role: this._role() }));
+  }
+
+  /** Id do usuário logado (para detectar edição do próprio perfil). */
+  currentUserId(): string | undefined { return this._user()?.id; }
 
   // ══ Token ═════════════════════════════════════════════════════
 

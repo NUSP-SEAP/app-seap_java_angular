@@ -39,6 +39,7 @@ export const routes: Routes = [
         { path: 'gestao-pessoas', title: 'Gestão de Pessoas | Admin', loadComponent: () => import('./pages/admin/admin-gestao-pessoas.component').then(m => m.AdminGestaoPessoasComponent) },
         { path: 'operador/perfil', title: 'Perfil | Admin', data: { tipo: 'operador' }, loadComponent: () => import('./pages/admin/admin-pessoa-perfil.component').then(m => m.AdminPessoaPerfilComponent) },
         { path: 'tecnico/perfil', title: 'Perfil | Admin', data: { tipo: 'tecnico' }, loadComponent: () => import('./pages/admin/admin-pessoa-perfil.component').then(m => m.AdminPessoaPerfilComponent) },
+        { path: 'administrador/perfil', canActivate: [masterGuard], title: 'Perfil | Admin', data: { tipo: 'administrador' }, loadComponent: () => import('./pages/admin/admin-pessoa-perfil.component').then(m => m.AdminPessoaPerfilComponent) },
         { path: 'novo-operador', title: 'Novo Operador — Administração', loadComponent: () => import('./pages/admin/admin-novo-operador.component').then(m => m.AdminNovoOperadorComponent) },
         { path: 'novo-tecnico', title: 'Novo Técnico — Administração', loadComponent: () => import('./pages/admin/admin-novo-tecnico.component').then(m => m.AdminNovoTecnicoComponent) },
         { path: 'novo-admin', canActivate: [masterGuard], title: 'Novo Administrador — Administração', loadComponent: () => import('./pages/admin/admin-novo-admin.component').then(m => m.AdminNovoAdminComponent) },

@@ -6,6 +6,7 @@ import { PaginationMeta } from '../../core/models/user.model';
 import { PaginationComponent } from '../../shared/components/pagination.component';
 import { ColumnFilterComponent, ColumnFilterDef, ColumnFilterState } from '../../shared/components/column-filter.component';
 import { getDistinct, buildFilters } from '../../core/helpers/table.helpers';
+import { AuthService } from '../../core/services/auth.service';
 
 interface TableState extends ListParams {
   page: number; limit: number; sort: string; direction: string; search: string;
@@ -115,6 +116,51 @@ interface TableState extends ListParams {
       </div>
       <app-pagination [meta]="tecMeta()!" (pageChange)="tecState.page = $event; loadTecnicos()" (limitChange)="tecState.limit = $event; tecState.page = 1; loadTecnicos()" />
     </section>
+
+    <!-- ═══ Administradores do Sistema (somente o master) ═══ -->
+    @if (isMaster()) {
+      <section>
+        <div class="section-header">
+          <h2>Administradores do Sistema</h2>
+          <div class="header-actions">
+            <button class="btn-xs" (click)="novoAdmin()">Novo Admin</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr>
+              <th>
+                <app-column-filter [col]="admCols[0]"
+                  [distinctValues]="getDistinct(admMeta(), 'nome')"
+                  [currentSort]="admState.sort" [currentDir]="admState.direction"
+                  (sortChange)="onAdmSort($event)" (filterChange)="onAdmFilter($event)" />
+              </th>
+              <th>
+                <app-column-filter [col]="admCols[1]"
+                  [distinctValues]="getDistinct(admMeta(), 'email')"
+                  [currentSort]="admState.sort" [currentDir]="admState.direction"
+                  (sortChange)="onAdmSort($event)" (filterChange)="onAdmFilter($event)" />
+              </th>
+              <th style="width:110px">Ação</th>
+            </tr></thead>
+            <tbody>
+              @if (admRows().length === 0) {
+                <tr><td colspan="3" class="empty-state">{{ admLoading() ? 'Carregando...' : 'Nenhum administrador encontrado.' }}</td></tr>
+              } @else {
+                @for (a of admRows(); track a['id']) {
+                  <tr>
+                    <td><strong>{{ a['nome_completo'] || a['nome'] }}</strong></td>
+                    <td>{{ a['email'] }}</td>
+                    <td><button class="btn-xs" (click)="abrirPerfil('administrador', a)">Perfil</button></td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pagination [meta]="admMeta()!" (pageChange)="admState.page = $event; loadAdministradores()" (limitChange)="admState.limit = $event; admState.page = 1; loadAdministradores()" />
+      </section>
+    }
   `,
   styles: [`
     .grid-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0 28px; }
@@ -125,6 +171,8 @@ interface TableState extends ListParams {
 export class AdminGestaoPessoasComponent implements OnInit {
   private api = inject(ApiService);
   private router = inject(Router);
+  private auth = inject(AuthService);
+  isMaster = this.auth.isMaster;
   private debounceOp: any; private debounceTec: any;
 
   // ── Column definitions ──
@@ -133,6 +181,10 @@ export class AdminGestaoPessoasComponent implements OnInit {
     { key: 'email', label: 'E-mail', type: 'text' },
   ];
   tecCols: ColumnFilterDef[] = [
+    { key: 'nome', label: 'Nome', type: 'text' },
+    { key: 'email', label: 'E-mail', type: 'text' },
+  ];
+  admCols: ColumnFilterDef[] = [
     { key: 'nome', label: 'Nome', type: 'text' },
     { key: 'email', label: 'E-mail', type: 'text' },
   ];
@@ -149,12 +201,17 @@ export class AdminGestaoPessoasComponent implements OnInit {
   tecRows = signal<Record<string,unknown>[]>([]); tecMeta = signal<PaginationMeta|null>(null); tecLoading = signal(true);
   tecSearch = '';
 
+  // ── Administradores (somente master; tabela sem busca global) ──
+  admState: TableState = { page:1, limit:10, sort:'nome', direction:'asc', search:'' };
+  admFilters: Record<string, ColumnFilterState> = {};
+  admRows = signal<Record<string,unknown>[]>([]); admMeta = signal<PaginationMeta|null>(null); admLoading = signal(true);
+
   // ── Navegação para o Perfil (operador ou técnico) ──
-  abrirPerfil(tipo: 'operador' | 'tecnico', row: Record<string,unknown>): void {
+  abrirPerfil(tipo: 'operador' | 'tecnico' | 'administrador', row: Record<string,unknown>): void {
     this.router.navigate([`/admin/${tipo}/perfil`], { queryParams: { id: row['id'] } });
   }
 
-  ngOnInit(): void { this.loadOperadores(); this.loadTecnicos(); }
+  ngOnInit(): void { this.loadOperadores(); this.loadTecnicos(); if (this.isMaster()) this.loadAdministradores(); }
 
   // ── Operadores ──
   loadOperadores(): void {
@@ -197,6 +254,27 @@ export class AdminGestaoPessoasComponent implements OnInit {
     this.loadTecnicos();
   }
   onTecSearch(): void { clearTimeout(this.debounceTec); this.debounceTec = setTimeout(() => { this.tecState.search=this.tecSearch; this.tecState.page=1; this.loadTecnicos(); }, 400); }
+
+  // ── Administradores (somente master) ──
+  loadAdministradores(): void {
+    this.admLoading.set(true);
+    this.admState.filters = buildFilters(this.admFilters);
+    this.api.getList('/api/admin/dashboard/administradores', this.admState).subscribe({
+      next: r => { this.admRows.set(r.data||[]); this.admMeta.set(r.meta||null); this.admLoading.set(false); },
+      error: () => { this.admRows.set([]); this.admLoading.set(false); },
+    });
+  }
+  onAdmSort(e: { sort: string; direction: string }): void {
+    this.admState.sort = e.sort; this.admState.direction = e.direction; this.admState.page = 1;
+    this.loadAdministradores();
+  }
+  onAdmFilter(e: { key: string; state: ColumnFilterState | null }): void {
+    if (e.state) this.admFilters[e.key] = e.state;
+    else delete this.admFilters[e.key];
+    this.admState.page = 1;
+    this.loadAdministradores();
+  }
+  novoAdmin(): void { this.router.navigate(['/admin/novo-admin']); }
 
   // ── Relatórios ──
   downloadReport(endpoint: string, format: string): void { this.api.downloadReport(endpoint, { format }); }
